@@ -72,8 +72,9 @@ function App() {
       <div className="aside-note">Built with Gemini, LangGraph & LangChain.<br/>Three specialists. One travel companion.</div>
     </aside>
     <main><header><span className="eyebrow">YOUR NEXT CHAPTER STARTS HERE</span><span className={'badge ' + mode}>{mode} mode</span></header>
-      <h1>Less planning.<br/><em>More possibility.</em></h1><p className="intro">Discover a place, shape your days, and bring the essentials. Let’s weave your next trip together.</p>
+      <div className="planner-intro"><h1>Less planning. <em>More possibility.</em></h1><p className="intro">Your next journey starts with a few details. We’ll take it from here.</p></div>
       <form onSubmit={event => { event.preventDefault(); void run() }}>
+        <div className="form-heading"><h2>A journey, made for you</h2><span>THE DETAILS MAKE THE DIFFERENCE</span></div>
         <div className="fields"><label>Where to?<input required maxLength={200} value={destination} onChange={e => setDestination(e.target.value)} /></label>
           <label>Departure<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
           <label>Days<input type="number" min={1} max={7} required value={days} onChange={e => setDays(Number(e.target.value))} /></label></div>
