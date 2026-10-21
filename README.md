@@ -7,6 +7,17 @@ default zero-configuration development fallback. **Docker is optional.**
 This is a runnable development foundation for [PRD.md](PRD.md), not a completed
 implementation of every PRD acceptance criterion. TripWeave is a working name.
 
+## Architecture reference
+
+- [Final V1 PRD](PRD.md)
+- [Database architecture](docs/DB_ARCHITECTURE.md): 18 application tables,
+  provider data mapping, ownership, transactions, and migration plan.
+- [API architecture](docs/API_ARCHITECTURE.md): 37 target operations, request
+  contracts, streaming, approvals, and error handling.
+
+These architecture documents describe the complete V1 target; they distinguish
+that design from the smaller currently implemented starter.
+
 ## Prerequisites
 
 - Python **3.11–3.13** (tested with 3.12).
