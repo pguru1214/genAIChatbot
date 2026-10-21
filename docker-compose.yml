@@ -1,0 +1,21 @@
+# OPTIONAL: React and FastAPI run directly, as in CrimeBase.
+# Only use this service if you do not already have a PostgreSQL database.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tripweave
+      POSTGRES_USER: tripweave
+      POSTGRES_PASSWORD: tripweave_local_only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - tripweave_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripweave -d tripweave"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tripweave_postgres:

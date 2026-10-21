@@ -1,0 +1,24 @@
+[project]
+name = "tripweave-backend"
+version = "0.1.0"
+description = "Travel assistant development microservice"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "pydantic-settings>=2.7,<3",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "httpx>=0.28,<1",
+  "langgraph>=1,<2",
+  "langchain>=1,<2",
+  "langchain-google-genai>=4,<5",
+  "tzdata>=2025.1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
