@@ -31,6 +31,15 @@ cd backend
 python -m venv .venv
 ```
 
+Use Python 3.11–3.13 to create this environment; Python 3.14 is outside the
+supported range. On Windows, explicitly select the version with
+`py -3.13 -m venv .venv` (install Python 3.13 first if it is unavailable).
+An existing environment created with 3.14 must be replaced with a supported one.
+
+For **Windows Git Bash**, activate with `source .venv/Scripts/activate`.
+Check `python --version` before installing: it must show 3.11, 3.12, or 3.13.
+Run the install commands from `backend`, where `requirements.txt` lives.
+
 Activate the environment on **Windows PowerShell**:
 
 ```powershell
@@ -57,6 +66,17 @@ directly instead of changing system execution policy. Run commands from `backend
 so the application finds its `.env` and development database.
 
 API documentation is served at `/docs` on port 8000. Health is `GET /api/health`.
+
+On Windows, VS Code **Terminal > Run Task > Backend: run** starts the service
+with `backend/.venv/Scripts/python.exe` explicitly, even if an old terminal is
+using a different Python. **Backend: install dependencies** uses that same
+environment. The **FastAPI: TripWeave** debug configuration also selects it.
+From Git Bash in `backend`, you can bypass activation entirely:
+
+```sh
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+./.venv/Scripts/python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
 ## 2. Start React
 

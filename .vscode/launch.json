@@ -5,6 +5,7 @@
       "name": "FastAPI: TripWeave",
       "type": "debugpy",
       "request": "launch",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
       "module": "uvicorn",
       "args": ["app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000"],
       "cwd": "${workspaceFolder}/backend",
