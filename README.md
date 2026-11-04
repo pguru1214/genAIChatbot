@@ -105,6 +105,19 @@ On Windows, use `npm.cmd` if PowerShell blocks the npm script shim.
 
 ## 3. Choose your database
 
+For an existing local PostgreSQL database created in pgAdmin, run from `backend`
+in Windows Git Bash:
+
+```sh
+./.venv/Scripts/python.exe setup_postgres.py
+```
+
+Enter your connection details (defaults: localhost, 5432, tripweave, postgres).
+The password prompt is hidden. The command verifies the connection, creates the
+`trips` and `action_proposals` tables if missing, and saves `backend/.env` only
+after success. Restart the backend, then refresh **Schemas > public > Tables**
+in pgAdmin. Existing SQLite plans are not migrated.
+
 The default `DATABASE_URL=sqlite:///./tripweave.db` starts immediately with no
 database installation. For PostgreSQL, create a database and set this in
 `backend/.env`, using your own database's credentials:
