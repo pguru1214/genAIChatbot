@@ -1,6 +1,6 @@
 # Travel Planning Chatbot — Product Requirements Document
 
-- **Version:** 1.2
+- **Version:** 1.4
 - **Updated:** 5 November 2026
 - **Finalized:** 21 October 2026
 - **Status:** V1 target requirements; partial local starter implemented; LangGraph confirmed as the workflow engine
@@ -64,6 +64,18 @@ have a moderate budget, and want a packing checklist.”
 ### 4.2 Conversational planning
 
 - Accept natural-language requests and retain context within a trip conversation.
+- Require destination, journey starting city and trip length. Ask for an omitted
+  starting city before generating connectivity recommendations; do not infer it
+  from the destination, browser location or an unrelated saved plan.
+- When departure date is omitted, default to the user's current local date plus
+  seven days. Keep that date for subsequent turns unless explicitly changed;
+  ask for correction when an explicitly supplied date is invalid or in the past.
+- When budget is omitted, use 50,000 as the total-trip budget, default currency
+  INR. Default the daily planning window to 10:00–18:00, in destination local
+  time. Respect explicit dates, budgets, currencies and daily hours.
+- Make assumptions visible and editable. Unspecified interests use general
+  sightseeing and unspecified companions do not trigger repetitive questions.
+  Explain the traveller-count assumption used for rough cost planning.
 - Collect destination, dates, duration, departure location when relevant, budget,
   currency, interests, companions, and travel time zone.
 - Ask focused questions when required details are missing.
@@ -132,6 +144,32 @@ have a moderate budget, and want a packing checklist.”
 ### 4.6 Personalized itineraries
 
 - Generate day-by-day plans from dates, interests, budget, and available weather.
+- Produce structured activities with visit duration, chronological order,
+  transfer/walking time, meals and rest. Calculate displayed start/end times
+  on the backend and show the next attraction after each visit.
+- Validate the requested day count, daily time capacity, meal breaks, transfers
+  between visits, allowed source IDs and budget allocation limits. Never present
+  an overbooked day as valid. Preserve usable days and show unscheduled candidates
+  with an explicit review note for days that cannot fit; label the plan as a draft.
+- Treat 10:00–18:00 as available sightseeing time, not a requirement to fill a
+  fixed percentage of every day. Relaxed days may leave substantial free time.
+- Separate long/overnight intercity journeys from the sightseeing clock. Preserve
+  their full duration estimates and flag arrival/return timing for confirmation;
+  do not assume arrival before 10 AM or silently extend the chosen trip dates.
+- Validate the AI proposal's structure first, then prepare schedules on the
+  backend. Do not spend repeated model calls merely repairing scheduling arithmetic.
+- Resending the identical failed turn with unchanged preferences resumes saved
+  work without another user-message entry. Prevent rapid concurrent submissions
+  in the browser and distinguish transport/network failures from AI format errors.
+- Include origin-to-destination and return planning, compare relevant modes and
+  explain a recommended option. Account for arrival/return in the itinerary;
+  explain any additional transit-night requirement explicitly.
+- Visit durations, travel times and costs remain labeled planning estimates
+  until backed by appropriate provider evidence. Suggested sightseeing slots
+  are not claims about an attraction's opening hours.
+- Provide route/booking verification links. The current no-new-key increment
+  does not fetch live road routes, traffic, train/flight/bus timetables, fares
+  or ticket inventory. Never invent direct services or service identifiers.
 - Group nearby activities where practical and include breaks.
 - Label visit durations and travel times as estimates unless appropriately sourced.
 - Suggest alternatives when weather makes an activity unsuitable.
@@ -194,6 +232,9 @@ have a moderate budget, and want a packing checklist.”
   specialist agent.
 - Add the India Tourism Router as a source-selection node. It may use a bounded
   Gemini call for state-level district selection, with deterministic fallback.
+- Add a deterministic Connectivity Planner node supplying origin/base context,
+  relevant transport modes and verification links to the Itinerary Agent.
+  Another LLM-backed specialist is not required for this increment.
 - Invoke only the agents required by a request. A weather question must not
   invoke itinerary generation or action preparation.
 - Execute independent retrieval tools concurrently after resolving location
@@ -259,6 +300,7 @@ implementation and public launch. This PRD does not certify current provider ter
 | Agent | Responsibility | Allowed capabilities |
 | --- | --- | --- |
 | India Tourism Router (routing node) | Identify Indian destination scope and select registered district/source IDs | Local registry and bounded structured Gemini selection; no arbitrary URL generation or external writes |
+| Connectivity Planner (planning node) | Supply origin, destination base, modes to compare and verification links | Deterministic read-only context; no live transport inventory, extra API key or booking execution |
 | Travel Research Agent | Resolve locations, retrieve destination/attraction/weather evidence, summarize research | Read-only geocoding, Wikipedia summaries/nearby places, optional Geoapify, and forecast tools |
 | Itinerary Agent | Generate or revise day plans and packing lists from preferences and evidence | Read relevant trip data and produce structured proposals; no external writes |
 | Action Agent | Prepare email, Calendar, and reminder proposals from the selected itinerary revision | Read approved trip context and prepare typed action proposals; execution remains backend-controlled |
@@ -298,7 +340,8 @@ flowchart TD
     Weather --> Evidence[Normalize evidence and tool errors]
     Places --> Evidence
     Evidence --> NeedPlan{Itinerary needed?}
-    NeedPlan -->|Yes| Planner[Itinerary Agent]
+    NeedPlan -->|Yes| Connectivity[Connectivity Planner]
+    Connectivity --> Planner[Itinerary Agent]
     NeedPlan -->|No| Validate[Backend evidence and output checks]
     Planner --> Validate
     Validate --> Present[Present answer or itinerary]

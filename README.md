@@ -13,6 +13,17 @@ State requests use a tourism-source router and suggested regional circuits.
 Official pages are fetched on demand and cached; website availability and district
 coverage are explicitly reported. See [implemented features and limitations](IMPLEMENTED_FEATURES.md).
 
+Planning now asks for a starting city and creates timed daily activities with
+visit lengths, transfers, meals, next attractions and conditional travel options.
+Omitted preferences default to departure in seven days, a 50,000 total budget
+(INR unless changed), and 10:00–18:00 daily hours. Transport estimates and
+verification links need no new API key; live schedules/fares are not connected.
+Long/overnight travel is kept outside the sightseeing clock. If arrival timing
+or a day's activities cannot be reconciled, the app preserves usable days and
+shows a clearly labeled draft with review notes. Relaxed days may leave free
+time. Use the saved-turn retry button after a failure rather than re-entering
+the trip; identical failed submissions resume the existing checkpoint.
+
 ## Architecture reference
 
 - [Final V1 PRD](PRD.md)

@@ -7,6 +7,9 @@ from app.tools import DestinationNeedsClarification
 
 class ModelResponseError(ValueError):
     """The model returned no usable structured response."""
+    def __init__(self, message, reason='schema'):
+        super().__init__(message)
+        self.reason = reason
 
 
 def provider_status(error: Exception) -> int | None:
@@ -30,7 +33,7 @@ def provider_status(error: Exception) -> int | None:
 
 def public_error(error: Exception) -> dict:
     if isinstance(error, DestinationNeedsClarification):
-        return {'code': 'destination_clarification', 'field': 'destination',
+        return {'code': 'destination_clarification', 'field': error.field,
                 'message': str(error) + (' Options: ' + '; '.join(error.choices) if error.choices else ''),
                 'choices': error.choices, 'retryable': False}
     if isinstance(error, (TimeoutError, httpx.TimeoutException)):
@@ -41,7 +44,12 @@ def public_error(error: Exception) -> dict:
     if status in {500, 502, 503, 504}:
         return {'code': 'provider_busy', 'message': 'The AI service is temporarily overloaded. Your saved details are safe. Please retry shortly; changing a valid date will not fix a service outage.', 'retryable': True}
     if isinstance(error, ModelResponseError):
-        return {'code': 'model_response_invalid', 'message': 'The AI service returned an incomplete answer. Your details are saved; please retry the saved turn.', 'retryable': True}
+        messages = {
+            'schema': 'The AI draft did not match the required plan format. Your trip details are saved. Retry the saved turn; you do not need to re-enter the trip.',
+            'empty': 'The AI service returned no usable answer. Your trip details are saved. Retry the saved turn shortly.',
+            'schedule': 'The AI draft could not be prepared as a usable schedule. Your details are saved; retry the saved turn or adjust the daily hours.'}
+        reason = getattr(error, 'reason', 'schema')
+        return {'code': 'model_response_invalid', 'reason': reason, 'message': messages.get(reason, messages['schema']), 'retryable': True}
     if status == 429:
         return {'code': 'provider_quota', 'message': 'A service rate limit or API quota was reached. Check your Gemini quota and retry later.', 'retryable': True}
     if status in {401, 403}:

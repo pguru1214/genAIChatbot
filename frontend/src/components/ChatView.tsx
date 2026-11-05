@@ -52,7 +52,7 @@ export function ChatView({ conv, mode, sidebarOpen, panelOpen, onMenu, onToggleP
         {empty ? <Welcome busy={busy} onPick={prompt => { conv.setMessage(prompt); inputRef.current?.focus() }} onQuickPlan={onQuickPlan} /> : <>
           <AnimatePresence initial={false}>
             {view?.messages.map((entry, index) => entry.role === 'assistant' && entry.content === planAnswer
-              ? <PlanReady key={index} text={entry.content} onOpen={onShowPlan} />
+              ? <PlanReady key={index} text={entry.content} needsReview={view?.result?.planning_status === 'needs_review'} onOpen={onShowPlan} />
               : <Message key={index} role={entry.role} content={entry.content} />)}
             {outgoing && <Message key={view?.messages.length ?? 0} role="user" content={outgoing} />}
             {busy && <motion.div key="typing" className="msg assistant" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -75,7 +75,7 @@ export function ChatView({ conv, mode, sidebarOpen, panelOpen, onMenu, onToggleP
               <button key={choice} type="button" className="chip" disabled={busy} onClick={() => void conv.send(choice, { destination: choice })}>{choice}</button>)}</div>}
             {['budget', 'currency', 'interests', 'companions'].includes(view.pending.field) && conv.details.destination && conv.details.start_date && conv.details.days &&
               <div className="chips"><button type="button" className="chip accent" disabled={busy} onClick={() => void conv.send('Build my plan using flexible preferences for any missing optional details.', {
-                budget: conv.details.budget || 'flexible', currency: conv.details.currency || 'not specified', interests: conv.details.interests || 'general sightseeing', companions: conv.details.companions || 'not specified',
+                budget: conv.details.budget || '50000', currency: conv.details.currency || 'INR', interests: conv.details.interests || 'general sightseeing', companions: conv.details.companions || 'not specified',
               })}><Sparkles size={14} /> Build my plan with flexible preferences</button></div>}
           </motion.div>}
         </AnimatePresence>
@@ -127,13 +127,13 @@ function Message({ role, content }: { role: string; content: string }) {
 }
 
 /** The finished itinerary lives in the trip panel; the chat shows a compact card pointing to it. */
-function PlanReady({ text, onOpen }: { text: string; onOpen: () => void }) {
+function PlanReady({ text, onOpen, needsReview }: { text: string; onOpen: () => void; needsReview?: boolean }) {
   const preview = text.replace(/\s+/g, ' ').slice(0, 180)
   return <motion.div className="msg assistant" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .4, ease }}>
     <span className="avatar guide"><Compass size={15} /></span>
     <div className="plan-ready">
       <span className="plan-ready-icon"><MapIcon size={20} /></span>
-      <div><strong>Your itinerary is ready</strong><p>{preview}{text.length > 180 && '…'}</p></div>
+      <div><strong>{needsReview ? 'Your draft is ready — review flagged travel days' : 'Your itinerary is ready'}</strong><p>{preview}{text.length > 180 && '…'}</p></div>
       <motion.button type="button" className="primary small" onClick={onOpen} whileHover={{ scale: 1.03 }} whileTap={{ scale: .97 }}>Open itinerary</motion.button>
     </div>
   </motion.div>

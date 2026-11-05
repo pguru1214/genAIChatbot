@@ -16,7 +16,7 @@ def stream_result(response):
 
 
 def request(**overrides):
-    return {'message': 'Plan my trip', 'destination': 'Jaipur', 'days': 2, **overrides}
+    return {'message': 'Plan my trip', 'destination': 'Jaipur', 'origin': 'Delhi', 'days': 2, **overrides}
 
 
 def test_health_and_validation():
@@ -30,7 +30,7 @@ def test_plan_stream_persist_delete():
     with TestClient(app) as client:
         response = client.post('/api/chat', json=request())
         result = stream_result(response)
-        assert result['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Itinerary Agent']
+        assert result['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Connectivity Planner', 'Itinerary Agent']
         assert 'DEMO' in result['answer']
         assert response.text.index('event: progress') < response.text.index('event: completed')
         assert any(t['id'] == result['trip_id'] for t in client.get('/api/trips').json())

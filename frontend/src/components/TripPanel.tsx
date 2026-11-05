@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { BookOpen, CalendarDays, CalendarPlus, Check, Clock, Coins, Heart, Link2, Mail, MapPin, PanelRightClose, Timer, Users, Wallet } from 'lucide-react'
 import type { ConversationState } from '../hooks/useConversation'
-import type { Plan } from '../types'
+import type { Plan, Details } from '../types'
 import { RichText } from './RichText'
 import { RouteArt } from './RouteArt'
 import { Notice, Sources, ease } from './ui'
@@ -11,6 +11,7 @@ type Tab = 'itinerary' | 'details' | 'sources'
 const sourceLabel = { chat: 'From this chat', quick: 'Quick plan', saved: 'Saved itinerary' }
 const fields: { key: string; label: string; icon: ReactNode; wide?: boolean }[] = [
   { key: 'destination', label: 'Destination', icon: <MapPin size={15} />, wide: true },
+  { key: 'origin', label: 'Starting city', icon: <MapPin size={15} />, wide: true },
   { key: 'start_date', label: 'Departure date', icon: <CalendarDays size={15} /> },
   { key: 'days', label: 'Days (1–7)', icon: <Timer size={15} /> },
   { key: 'budget', label: 'Total budget', icon: <Wallet size={15} /> },
@@ -18,6 +19,8 @@ const fields: { key: string; label: string; icon: ReactNode; wide?: boolean }[] 
   { key: 'interests', label: 'Interests', icon: <Heart size={15} />, wide: true },
   { key: 'companions', label: 'Travelling with', icon: <Users size={15} /> },
   { key: 'timezone', label: 'Trip time zone', icon: <Clock size={15} /> },
+  { key: 'day_start', label: 'Daily start', icon: <Clock size={15} /> },
+  { key: 'day_end', label: 'Daily finish', icon: <Clock size={15} /> },
 ]
 
 export function TripPanel({ plan, conv, actionBusy, onAction, onClose }: { plan: Plan | null; conv: ConversationState; actionBusy: boolean; onAction: (intent: string) => void; onClose: () => void }) {
@@ -26,7 +29,8 @@ export function TripPanel({ plan, conv, actionBusy, onAction, onClose }: { plan:
   useEffect(() => { if (plan) setTab('itinerary') }, [plan?.key])
   const evidence = plan?.result?.research?.evidence ?? []
   const sourceCount = evidence.filter(e => e.url).length + (plan?.result?.research?.errors.length ?? 0)
-  const known = fields.filter(f => conv.details[f.key] !== undefined && conv.details[f.key] !== '').length
+  const shownDetails = plan?.source === 'saved' || plan?.source === 'quick' ? plan.details : undefined
+  const known = fields.filter(f => (shownDetails ?? conv.details)[f.key] !== undefined && (shownDetails ?? conv.details)[f.key] !== '').length
   const tabs: { id: Tab; label: string; badge?: string }[] = [
     { id: 'itinerary', label: 'Itinerary' },
     { id: 'details', label: 'Trip details', badge: `${known}/${fields.length}` },
@@ -37,7 +41,7 @@ export function TripPanel({ plan, conv, actionBusy, onAction, onClose }: { plan:
     <header className="pane-head panel-head">
       <div className="pane-title">
         <strong>{plan?.destination || (conv.details.destination ? String(conv.details.destination) : 'Your trip')}</strong>
-        <span>{plan ? sourceLabel[plan.source] : 'Itinerary appears here once it is ready'}{plan && plan.days > 0 && ` · ${plan.days} ${plan.days === 1 ? 'day' : 'days'}`}</span>
+        <span>{plan?.result?.planning_status === 'needs_review' ? 'Draft — travel/day arrangements need review' : plan ? sourceLabel[plan.source] : 'Itinerary appears here once it is ready'}{plan && plan.days > 0 && ` · ${plan.days} ${plan.days === 1 ? 'day' : 'days'}`}</span>
       </div>
       <button className="icon-btn panel-close" aria-label="Hide trip panel" onClick={onClose}><PanelRightClose size={18} /></button>
     </header>
@@ -52,7 +56,7 @@ export function TripPanel({ plan, conv, actionBusy, onAction, onClose }: { plan:
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .25, ease }}>
           {tab === 'itinerary' && (plan ? <Itinerary plan={plan} /> : <EmptyItinerary />)}
-          {tab === 'details' && <DetailsForm conv={conv} />}
+          {tab === 'details' && <DetailsForm conv={conv} savedDetails={shownDetails} />}
           {tab === 'sources' && <div className="sources-tab">
             {plan?.result?.agent_trace?.length ? <><h4 className="panel-sub">Specialists involved</h4><div className="agents">{plan.result.agent_trace.map(name => <span key={name}>{name}</span>)}</div></> : null}
             {plan?.result?.research?.errors.map(error => <Notice key={error}>{error}</Notice>)}
@@ -77,6 +81,8 @@ function Itinerary({ plan }: { plan: Plan }) {
   return <article className="itinerary">
     {plan.streaming && <div className="stream-status"><span className="spinner dark" /> {plan.status || 'Weaving your plan…'}</div>}
     {plan.answer ? <RichText text={plan.answer} variant="plan" /> : !plan.streaming && <p className="muted">This plan has no itinerary text.</p>}
+    {!!plan.result?.connectivity?.verification_links.length && <div className="sources">{plan.result.connectivity.verification_links.map(link =>
+      <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label}</a>)}</div>}
     {plan.streaming && plan.answer && <span className="caret" />}
   </article>
 }
@@ -90,17 +96,18 @@ function EmptyItinerary() {
   </div>
 }
 
-function DetailsForm({ conv }: { conv: ConversationState }) {
-  const { details, setDetails, busy } = conv
+function DetailsForm({ conv, savedDetails }: { conv: ConversationState; savedDetails?: Details }) {
+  const { setDetails, busy } = conv
+  const details = savedDetails ?? conv.details
   return <div className="details-form">
-    <p className="muted">The guide fills these in as you chat. Edit anything here and it is applied with your next message. For a new destination, start a new trip.</p>
+    <p className="muted">{savedDetails ? 'Preferences used for this saved plan. Reopen its conversation to refine it, or start a new trip.' : 'The guide fills these in as you chat. Edit anything here and it is applied with your next message. Defaults: seven days from today, ₹50,000 total, 10 AM–6 PM.'}</p>
     <div className="details-grid">
       {fields.map(({ key, label, icon, wide }) => <label className={'field' + (wide ? ' wide' : '')} key={key}>{label}
-        <span className="input-wrap">{icon}<input disabled={busy} type={key === 'days' ? 'number' : key === 'start_date' ? 'date' : 'text'} min={key === 'days' ? 1 : undefined} max={key === 'days' ? 7 : undefined} maxLength={key === 'interests' ? 500 : 200}
+        <span className="input-wrap">{icon}<input disabled={busy || !!savedDetails} type={key === 'days' ? 'number' : key === 'start_date' ? 'date' : key === 'day_start' || key === 'day_end' ? 'time' : 'text'} min={key === 'days' ? 1 : undefined} max={key === 'days' ? 7 : undefined} maxLength={key === 'interests' ? 500 : 200}
           value={details[key] ?? ''} onChange={e => setDetails({ ...details, [key]: key === 'days' && e.target.value ? Number(e.target.value) : e.target.value })} /></span>
       </label>)}
     </div>
-    <AnimatePresence>{conv.hasEdits && <motion.div className="apply-bar" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+    <AnimatePresence>{!savedDetails && conv.hasEdits && <motion.div className="apply-bar" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
       <span><BookOpen size={15} /> You have unsent changes</span>
       <button className="primary small" disabled={busy} onClick={() => void conv.send()}><Check size={15} /> Apply in chat</button>
     </motion.div>}</AnimatePresence>

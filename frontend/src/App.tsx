@@ -38,6 +38,11 @@ export function App() {
 
   // Quick plan form.
   const [destination, setDestination] = useState('Jaipur, Rajasthan, India')
+  const [origin, setOrigin] = useState('')
+  const [budget, setBudget] = useState('50000')
+  const [currency, setCurrency] = useState('INR')
+  const [dayStart, setDayStart] = useState('10:00')
+  const [dayEnd, setDayEnd] = useState('18:00')
   const [message, setMessage] = useState('Plan a relaxed trip with historical attractions and a packing checklist.')
   const [days, setDays] = useState(3)
   const [date, setDate] = useState('')
@@ -67,7 +72,8 @@ export function App() {
     setPinned({ key: 'quick-' + Date.now(), source: 'quick', destination: dest, days: length, answer: '', result: null, streaming: true, status: 'Connecting to agents…' })
     try {
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        message, destination: dest, days: length, start_date: date || null,
+        message, destination: dest, origin: origin || null, days: length, start_date: date || null,
+        budget, currency, day_start: dayStart, day_end: dayEnd,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, intent,
         trip_id: action ? source?.result?.trip_id : null,
       }) })
@@ -76,7 +82,7 @@ export function App() {
       await readEvents(response, (event, data) => {
         if (event === 'progress') setPinned(p => p && { ...p, status: data.message })
         if (event === 'answer_delta') setPinned(p => p && { ...p, answer: p.answer + data.text })
-        if (event === 'completed') { completed = true; setPinned(p => p && { ...p, result: data.result, streaming: false }) }
+        if (event === 'completed') { completed = true; setPinned(p => p && { ...p, result: data.result, details: data.result.request, streaming: false }) }
         if (event === 'error') throw new Error(data.message)
       })
       if (!completed) throw new Error('Connection ended before completion. Check saved trips before retrying.')
@@ -97,7 +103,16 @@ export function App() {
           onNew={() => { conv.choose(''); setPinned(null); setMobileView('chat'); closeSidebarIfNarrow() }}
           onQuickPlan={() => { setQuickOpen(true); closeSidebarIfNarrow() }}
           onChat={id => { conv.choose(id); setPinned(null); setMobileView('chat'); closeSidebarIfNarrow() }}
-          onTrip={trip => { setPinned({ key: 'saved-' + trip.id, source: 'saved', destination: trip.destination, days: 0, answer: trip.answer, result: { ...trip, trip_id: trip.id, agent_trace: [] } }); showPlan(); closeSidebarIfNarrow() }} />
+          onTrip={trip => { void (async () => {
+            try {
+              const response = await fetch(`/api/trips/${trip.id}`)
+              if (!response.ok) throw new Error('Could not open saved trip')
+              const saved = await response.json()
+              setPinned({ key: 'saved-' + trip.id, source: 'saved', destination: saved.destination, days: Number(saved.details.days) || 0,
+                answer: saved.result.answer, result: saved.result, details: saved.details })
+              showPlan(); closeSidebarIfNarrow()
+            } catch { toast({ title: 'Could not open saved trip', message: 'Please retry.' }) }
+          })() }} />
       </motion.div>}
       {sidebarOpen && <motion.div key="side-scrim" className="side-scrim" onClick={() => setSidebarOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />}
     </AnimatePresence>
@@ -118,6 +133,7 @@ export function App() {
     </div>
 
     <QuickPlanModal open={quickOpen} busy={quickBusy} mode={mode} onClose={() => setQuickOpen(false)} onSubmit={() => void run()}
-      form={{ destination, setDestination, message, setMessage, days, setDays, date, setDate }} />
+      form={{ destination, setDestination, origin, setOrigin, budget, setBudget, currency, setCurrency,
+        dayStart, setDayStart, dayEnd, setDayEnd, message, setMessage, days, setDays, date, setDate }} />
   </div>
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readEvents } from '../lib/sse'
 import { useToast } from '../components/Toasts'
 import type { Conversation, ConversationSummary, Details } from '../types'
@@ -14,6 +14,7 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
   const [busy, setBusy] = useState(true)
   const [status, setStatus] = useState('Loading your conversation…')
   const [failed, setFailed] = useState(false)
+  const sending = useRef(false)
   // The traveller's message, shown immediately until the server echoes the conversation back.
   const [outgoing, setOutgoing] = useState('')
   const toast = useToast()
@@ -53,8 +54,12 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
   const hasEdits = Object.entries(details).some(([key, value]) => value !== '' && value !== view?.details[key])
   async function send(reply?: string, chosenDetails: Details = {}) {
     const submitted = reply ?? message.trim()
-    if (busy || (!submitted && !view?.recoverable && !hasEdits)) return
-    setBusy(true); setFailed(false); setStatus('Checking your trip details…'); setOutgoing(submitted || (hasEdits ? 'Apply trip details' : 'Retry saved turn'))
+    if (busy || sending.current || (!submitted && !view?.recoverable && !hasEdits)) return
+    sending.current = true
+    const lastUser = view?.messages.slice().reverse().find(m => m.role === 'user')?.content
+    const repeatFailed = view?.recoverable && submitted === lastUser && !hasEdits &&
+      Object.entries(chosenDetails).every(([key, value]) => value === view.details[key])
+    setBusy(true); setFailed(false); setStatus('Checking your trip details…'); setOutgoing(repeatFailed ? '' : submitted || (hasEdits ? 'Apply trip details' : 'Retry saved turn'))
     let current = view
     try {
       if (!current) {
@@ -84,7 +89,9 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
       setMessage(''); setStatus('Progress saved. You can continue after refreshing.')
       await refreshList(); onSaved()
     } catch (error) {
-      setFailed(true); setStatus(error instanceof Error ? error.message : 'Unable to complete this turn')
+      setFailed(true); setStatus(error instanceof TypeError && /fetch|network|load failed/i.test(error.message)
+        ? 'The connection to the backend was interrupted. Your message is kept or saved in this conversation. Reopen it before retrying.'
+        : error instanceof Error ? error.message : 'Unable to complete this turn')
       if (current) {
         try {
           const restored = await open(current.id)
@@ -99,7 +106,7 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
           await refreshList()
         } catch { /* Keep the actionable error when restoration is unavailable. */ }
       }
-    } finally { setBusy(false); setOutgoing('') }
+    } finally { sending.current = false; setBusy(false); setOutgoing('') }
   }
 
   function choose(id: string) {

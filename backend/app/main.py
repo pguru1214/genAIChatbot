@@ -104,7 +104,9 @@ def conversation_message(conversation_id: str, request: TurnRequest, db: Session
         turn = request.model_dump(mode='json', exclude={'checkpoint_id'})
         turn['details'] = request.details.model_dump(mode='json', exclude_none=True)
         graph_input = Command(resume=turn) if current['pending'] else {'turn': turn}
-        if current['recoverable'] and request.message == 'Retry saved turn' and not turn['details']:
+        last_user = next((m['content'] for m in reversed(current['messages']) if m['role'] == 'user'), None)
+        unchanged_details = all(current['details'].get(k) == v for k, v in turn['details'].items())
+        if current['recoverable'] and request.message in {'Retry saved turn', last_user} and unchanged_details:
             # Resume failed work without appending or charging for another user turn.
             graph_input = None
     except Exception:
@@ -134,7 +136,8 @@ def conversation_message(conversation_id: str, request: TurnRequest, db: Session
         except Exception as error:
             failure = public_error(error)
             logger.warning('Conversation failed: %s category=%s error_type=%s', conversation_id, failure['code'], type(error).__name__)
-            failure['message'] += ' Your conversation checkpoint is saved.'
+            if 'saved' not in failure['message'].casefold():
+                failure['message'] += ' Your conversation checkpoint is saved.'
             yield sse('error', failure, conversation_id)
         finally:
             lock.release()
@@ -148,6 +151,15 @@ def trips(db: Session = Depends(get_db)):
     return [{'id': t.id, 'destination': t.destination, 'created_at': t.created_at.isoformat(),
              'answer': t.result['answer'], 'mode': t.result.get('research', {}).get('mode', 'demo')}
             for t in db.scalars(select(Trip).order_by(Trip.created_at.desc()).limit(50))]
+
+
+@app.get('/api/trips/{trip_id}')
+def get_trip(trip_id: str, db: Session = Depends(get_db)):
+    trip = db.get(Trip, trip_id)
+    if not trip:
+        raise HTTPException(404, 'Trip not found')
+    return {'id': trip.id, 'destination': trip.destination, 'details': trip.request,
+            'result': {**trip.result, 'trip_id': trip.id}}
 
 
 @app.delete('/api/trips/{trip_id}')
@@ -181,8 +193,8 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         state = {'request': payload}
         try:
             # The starter streams graph progress, then validated text; not raw model reasoning.
-            async with asyncio.timeout(100):
-                async for update in graph.astream(state, stream_mode='updates', config={'recursion_limit': 8}):
+            async with asyncio.timeout(180):
+                async for update in graph.astream(state, stream_mode='updates', config={'recursion_limit': 10}):
                     for node, value in update.items():
                         if value:
                             state.update(value)
@@ -196,7 +208,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                     state['proposal_id'] = proposal.id
                     state['trip_id'] = request.trip_id
                 else:
-                    trip = Trip(destination=request.destination, request=payload, result=state)
+                    trip = Trip(destination=request.destination, request=state['request'], result=state)
                     session.add(trip)
                     session.commit()
                     state['trip_id'] = trip.id

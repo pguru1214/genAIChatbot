@@ -5,6 +5,11 @@ import { Notice, ease } from './ui'
 
 export type QuickForm = {
   destination: string; setDestination: (v: string) => void
+  origin: string; setOrigin: (v: string) => void
+  budget: string; setBudget: (v: string) => void
+  currency: string; setCurrency: (v: string) => void
+  dayStart: string; setDayStart: (v: string) => void
+  dayEnd: string; setDayEnd: (v: string) => void
   message: string; setMessage: (v: string) => void
   days: number; setDays: (v: number) => void
   date: string; setDate: (v: string) => void
@@ -29,6 +34,10 @@ export function QuickPlanModal({ open, form: f, busy, mode, onClose, onSubmit }:
           <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}><X size={18} /></button>
         </header>
         <div className="modal-body">
+          <p className="muted">If omitted: departure in seven days, total budget ₹50,000 and sightseeing 10 AM–6 PM. Tell the guide in chat to change these.</p>
+          <label className="field">Starting city
+            <span className="input-wrap"><MapPin size={16} /><input required maxLength={200} value={f.origin} onChange={e => f.setOrigin(e.target.value)} placeholder="For example, Hyderabad" /></span>
+          </label>
           <label className="field">Where in India? State, district or city
             <span className="input-wrap"><MapPin size={16} /><input autoFocus required maxLength={200} value={f.destination} onChange={e => f.setDestination(e.target.value)} /></span>
           </label>
@@ -50,6 +59,14 @@ export function QuickPlanModal({ open, form: f, busy, mode, onClose, onSubmit }:
           <label className="field">What does your ideal trip look like?
             <textarea required maxLength={4000} value={f.message} onChange={e => f.setMessage(e.target.value)} />
           </label>
+          <div className="modal-row">
+            <label className="field">Total trip budget<input maxLength={200} value={f.budget} onChange={e => f.setBudget(e.target.value)} placeholder="50000" /></label>
+            <label className="field">Currency<input maxLength={30} value={f.currency} onChange={e => f.setCurrency(e.target.value)} placeholder="INR" /></label>
+          </div>
+          <div className="modal-row">
+            <label className="field">Daily start<input required type="time" value={f.dayStart} onChange={e => f.setDayStart(e.target.value)} /></label>
+            <label className="field">Daily finish<input required type="time" value={f.dayEnd} onChange={e => f.setDayEnd(e.target.value)} /></label>
+          </div>
           {mode === 'demo' && <Notice>Demo mode uses illustrative sample data—not live forecasts or researched attractions. Configure the backend for live mode.</Notice>}
         </div>
         <footer className="modal-foot">

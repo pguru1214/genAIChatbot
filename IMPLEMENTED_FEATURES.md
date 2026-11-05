@@ -72,15 +72,49 @@ still pending. No claim is made that every registered website is always online.
   bounded transient retries and an optional explicitly configured fallback model.
 - LangGraph routes research, itinerary generation and action previews; the
   source router supplements the three specialist roles.
-- Chat collects destination, departure date, 1–7-day duration, budget, currency,
-  interests, companions and time zone. The trip editor can supply corrections.
+- Chat requires destination, starting city and 1–7-day duration. It asks for an
+  omitted starting city instead of guessing the journey origin.
+- Missing date defaults to the user's local date plus seven days. Missing budget
+  defaults to 50,000, with INR as the default currency. Missing daily hours default
+  to 10:00–18:00, in destination local time. Explicit preferences override defaults.
+  The chosen date persists across turns. Explicit invalid/past dates still need correction.
+- Interests default to general sightseeing and companion details remain unspecified
+  unless supplied. These do not block generation with repetitive questions.
+  Default assumptions are visible in the answer and can be edited.
 - Plain dates and common field replies are parsed locally to avoid unnecessary
   model calls. Registered destination replies can also resolve without Gemini.
 - Durable clarification and resume use PostgreSQL or SQLite LangGraph
   checkpoints. Reloading a conversation restores its pending question/details.
-- Day-by-day itineraries and packing suggestions use supplied preferences and
-  evidence. State requests produce suggested regional circuits; district
-  requests remain scoped to the district.
+- Itineraries now contain structured activities with visit durations, ordered
+  transfers, meals and rest. The backend calculates clock times and identifies
+  the next attraction after each visit. It validates day count, time capacity,
+  meals on full days, transfers between visits, source IDs and budget allocation
+  limits. Packing checklists and suggested spending allocations are included.
+- State requests produce suggested regional circuits; district requests remain
+  scoped to the district. Source research and visit/travel durations are not
+  substitutes for confirmed opening hours or verified road routing.
+- A deterministic Connectivity Planner supplies origin, destination base, relevant
+  travel modes and Google Maps/IRCTC verification links. The existing Itinerary
+  Agent compares conditional transport options and explains a recommendation,
+  including origin/arrival and return considerations. This adds no transport API key.
+- **No live transport API is connected.** Journey times, costs and visit durations
+  are estimates, not confirmed fares, services, departures, traffic or ticket
+  availability. Extra transit-night assumptions must be explained in the answer.
+- Larger itinerary responses use a simplified provider schema to avoid Gemini
+  rejecting nested array constraints. Full Pydantic and request-specific validation
+  remain enforced locally, with bounded validation-feedback retries.
+- Reliability correction: AI now supplies a typed proposal; the backend performs
+  schedule preparation separately. Relaxed days no longer need to fill 65 percent
+  of the daily window. Long/overnight journeys retain their full duration in
+  separate travel blocks; arrival/return days are flagged until timing is confirmed.
+- A day that cannot fit is shown as unscheduled options with a review note while
+  other valid days retain their clock times. The whole result is visibly labeled
+  a draft needing review. Source validation still applies to unscheduled options.
+- Large proposals allow up to 60 seconds per model attempt, with at most two
+  attempts total, within the existing overall request deadline.
+- An omitted local transfer can be repaired with an explicitly provisional
+  30-minute allowance only when spare time or flexible rest permits it. Visits are never
+  shortened to hide the conflict, and the full schedule is validated again.
 - Regional circuits currently do not fetch forecasts for every stop. The app
   explains that a specific base town is needed rather than invent statewide
   weather. Road travel times and transfer logistics remain estimates.
@@ -102,6 +136,12 @@ still pending. No claim is made that every registered website is always online.
 
 - Responsive React/TypeScript chat, trip panel, editable details, quick planner,
   saved journeys, progress messages and source references.
+- Quick planner fields include starting city, total budget/currency and daily
+  hours. Saved-trip retrieval restores that plan's preferences, evidence and
+  structured result rather than displaying an unrelated chat's empty details.
+- `GET /api/trips/{id}` returns an individual saved plan with preferences and
+  research. Earlier overview-only plans are retained; regenerate them to obtain
+  the new detailed schedule format.
 - India-only welcome examples and destination suggestions.
 - FastAPI SSE responses for progress, validated answer output and useful errors.
 - PostgreSQL or SQLite persistence for trips, conversations, action proposals,
@@ -111,6 +151,10 @@ still pending. No claim is made that every registered website is always online.
   saved plans. **No email is sent and no calendar event is created.**
 - Process-local conversation serialization and checkpoint conflict detection
   protect the current single-worker local workflow.
+- Repeating the identical failed message with unchanged details resumes the
+  existing checkpoint without appending another user message. A browser-side
+  in-flight guard prevents rapid duplicate submissions; connection failures use
+  an actionable message instead of raw “Failed to fetch.”
 
 ## Validation and remaining work
 
@@ -122,18 +166,54 @@ database records and official website requests from the developer environment.
 Live public-source checks are separate from mocked integration tests; a green
 test suite does not guarantee third-party uptime or AI factual accuracy.
 
-Validation for this increment: **70 backend tests passed**. Live adapter checks
+Previous India-directory increment: **70 backend tests passed**. Live adapter checks
 retrieved usable pages for all 17 initial district sources after correcting
 redirects and one broken path. A separate, approved synthetic Jaipur request
 returned a real Gemini itinerary and packing checklist using official tourism
 evidence, without provider notices. The complete state-level conversation was
 verified with mocked AI; this does not claim a live Gemini test for every state.
 
+Detailed-planning increment: **84 backend tests passed**, and the frontend
+production build passed. A live synthetic Delhi-to-Jaipur trip produced three
+validated timed days, transport comparisons and a packing checklist, using
+five evidence records with no provider notices. Its omitted preferences became
+12 November 2026 (current local date plus seven days), INR 50,000 total and
+10:00–18:00 daily hours. This checks real Gemini compatibility, not live
+transport inventory or actual road timing accuracy.
+
+Reliability correction: **90 backend tests passed** and the frontend build passed.
+New regressions cover a five-day state conversation with a 14-hour journey,
+relaxed days, overfull days, source checks on drafts and duplicate failed-turn
+resubmission. A live synthetic five-day Kerala trip returned a reviewable draft:
+three days had validated schedules, with arrival and return days explicitly flagged
+for confirmation. This is a useful AI response, not a claim of verified transport
+availability or a fully finalized journey.
+
 Still planned: nationwide detailed district coverage, source administration and
 scheduled refresh, verified road routing/transfer feasibility, forecasts per
 circuit stop, authentication and ownership, itinerary revisions, packing progress,
 real Gmail/Calendar OAuth and execution, reminders, production migrations and
 deployment hardening. No vector database is required for this increment.
+
+## External APIs and cost choices
+
+The detailed schedule/defaults/connectivity increment uses the existing Gemini
+integration and tourism sources. There is no new transport-provider charge or key;
+Gemini usage still follows the configured account's quotas/pricing. Verification
+links open consumer websites when the user chooses to follow them.
+
+For later live integrations:
+
+- Google Maps Routes can provide road/transit route data where available. Its
+  free allowances are part of a metered service, not unlimited free usage.
+- OpenRouteService offers a free plan for road/walking directions subject to
+  quotas; its public API is not a rail/bus/flight timetable or fare inventory.
+- Live flight offers and Indian rail/bus inventory need suitable provider
+  agreements/API access and coverage checks. No such integration is claimed here.
+
+Existing Research and Itinerary agents plus the Connectivity Planner node are
+sufficient for this increment. More autonomous agents would not supply missing
+transport data by themselves.
 
 ## Run the updated backend
 

@@ -72,7 +72,7 @@ def test_demo_and_conversation_reject_foreign_destinations_without_losing_dates(
         response = client.post(f'/api/conversations/{cid}/messages', json={'message': 'Goa, India',
             'checkpoint_id': view['checkpoint_id']})
         assert 'event: error' not in response.text
-        assert client.get(f'/api/conversations/{cid}').json()['pending']['field'] == 'budget'
+        assert client.get(f'/api/conversations/{cid}').json()['pending']['field'] == 'origin'
 
 
 def test_state_selection_bounds_days_and_rejects_unknown_ids_and_cross_clusters():
@@ -160,7 +160,7 @@ async def test_router_selects_before_retrieval_and_has_model_failure_fallback(mo
     assert result['agent_trace'] == ['India Tourism Router']
 
 
-def test_state_live_graph_creates_and_saves_cited_ai_plan(monkeypatch):
+def test_state_live_graph_creates_and_saves_cited_ai_plan(monkeypatch, itinerary_payload):
     import app.agents as agents
     import app.conversations as conversations
     from app.config import Settings
@@ -172,8 +172,7 @@ def test_state_live_graph_creates_and_saves_cited_ai_plan(monkeypatch):
         if schema is agents.TourismSelection:
             return schema(district_ids=['goa-north-goa', 'goa-south-goa', 'not-real'])
         assert 'Colva Beach' in messages[-1].content
-        return schema(answer='Suggested Goa circuit.\nDay 1: Fort Aguada.\nDay 2: Calangute Beach.\nDay 3: Transfer south (estimate).\nDay 4: Colva Beach.\nPacking checklist: shoes, water, charger.',
-                      source_ids=['catalog-goa-north-goa', 'catalog-goa-south-goa'])
+        return schema.model_validate(itinerary_payload(4, ['catalog-goa-north-goa', 'catalog-goa-south-goa']))
 
     async def download(url):
         return 'Official Goa tourism information. ' * 10
@@ -183,7 +182,7 @@ def test_state_live_graph_creates_and_saves_cited_ai_plan(monkeypatch):
     with TestClient(app) as client:
         cid = client.post('/api/conversations').json()['id']
         response = client.post(f'/api/conversations/{cid}/messages', json={'message': 'Apply trip details', 'details': {
-            'destination': 'Goa, India', 'days': 4, 'start_date': '2099-11-11', 'budget': 'flexible',
+            'destination': 'Goa, India', 'origin': 'Mumbai', 'days': 4, 'start_date': '2099-11-11', 'budget': 'flexible',
             'currency': 'INR', 'interests': 'beaches', 'companions': 'solo'}})
         assert 'event: completed' in response.text, response.text
         assert 'event: error' not in response.text
@@ -192,3 +191,32 @@ def test_state_live_graph_creates_and_saves_cited_ai_plan(monkeypatch):
         assert view['result']['trip_id'] == cid
         assert 'Packing checklist' in view['result']['answer']
         assert view['result']['research']['selected_districts'] == ['North Goa', 'South Goa']
+
+
+def test_five_day_state_conversation_saves_partial_travel_review_without_error(monkeypatch, itinerary_payload):
+    import app.agents as agents
+    import app.conversations as conversations
+    from app.config import Settings
+    settings = Settings(app_mode='live')
+    for module in [agents, conversations]:
+        monkeypatch.setattr(module, 'get_settings', lambda: settings)
+    async def generation(schema, messages, **kwargs):
+        if schema is agents.TourismSelection:
+            return schema(district_ids=['kerala-ernakulam', 'kerala-alappuzha'])
+        payload = itinerary_payload(5, ['catalog-kerala-ernakulam'])
+        payload['days'][0]['activities'] = [{'kind': 'transfer', 'title': 'Long intercity journey',
+            'duration_minutes': 840, 'description': 'Transport timing must be checked.'}]
+        return schema.model_validate(payload)
+    monkeypatch.setattr(agents, 'ainvoke_structured', generation)
+    with TestClient(app) as client:
+        cid = client.post('/api/conversations').json()['id']
+        response = client.post(f'/api/conversations/{cid}/messages', json={'message': 'Apply trip details', 'details': {
+            'origin': 'Origin City', 'destination': 'Kerala, India', 'days': 5, 'start_date': '2099-11-12'}})
+        assert 'event: completed' in response.text
+        assert 'event: error' not in response.text
+        view = client.get(f'/api/conversations/{cid}').json()
+        assert view['result']['planning_status'] == 'needs_review'
+        assert len(view['result']['schedule']) == 5
+        assert view['result']['schedule'][1]['status'] == 'scheduled'
+        assert view['result']['schedule'][0]['activities'] == []
+        assert client.get(f'/api/trips/{cid}').json()['result']['planning_status'] == 'needs_review'

@@ -15,9 +15,10 @@ import httpx
 
 
 class DestinationNeedsClarification(ValueError):
-    def __init__(self, message, choices=None):
+    def __init__(self, message, choices=None, field='destination'):
         super().__init__(message)
         self.choices = choices or []
+        self.field = field
 
 
 INDIA_ONLY = 'TripWeave currently plans trips within India only. Please choose an Indian state, union territory, district or city.'

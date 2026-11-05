@@ -24,7 +24,7 @@ def turn(client, conversation_id, message, details=None):
 
 
 def complete_details():
-    return {'destination': 'Jaipur', 'start_date': '2099-12-10', 'days': 3, 'budget': '15000',
+    return {'destination': 'Jaipur', 'origin': 'Delhi', 'start_date': '2099-12-10', 'days': 3, 'budget': '15000',
             'currency': 'INR', 'interests': 'history and local food', 'companions': 'solo'}
 
 
@@ -44,15 +44,15 @@ def test_clarification_survives_application_restart():
         conversation_id = create(client)
         first = turn(client, conversation_id, 'Plan a Jaipur trip')
         assert first['details']['destination'] == 'Jaipur'
-        assert first['pending']['field'] == 'start_date'
+        assert first['pending']['field'] == 'origin'
         assert len(first['messages']) == 2
     # Recreates graph and saver, using the same disk database, without in-memory state.
     with TestClient(app) as client:
         restored = client.get(f'/api/conversations/{conversation_id}').json()
         assert restored == first
-        second = turn(client, conversation_id, '2099-12-10')
+        second = turn(client, conversation_id, 'Delhi')
         assert second['details']['destination'] == 'Jaipur'
-        assert second['details']['start_date'] == '2099-12-10'
+        assert second['details']['origin'] == 'Delhi'
         assert second['pending']['field'] == 'days'
         assert len(second['messages']) == 4
 
@@ -64,7 +64,7 @@ def test_full_plan_followup_and_no_duplicate_trip():
         assert result['pending'] is None
         assert result['result']['trip_id'] == conversation_id
         assert 'DEMO itinerary' in result['messages'][-1]['content']
-        assert result['result']['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Itinerary Agent']
+        assert result['result']['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Connectivity Planner', 'Itinerary Agent']
         changed = turn(client, conversation_id, 'Make it four days', {'days': 4})
         assert changed['details']['days'] == 4
         assert changed['details']['interests'] == 'history and local food'
@@ -79,11 +79,10 @@ def test_each_detail_is_collected_and_threads_are_isolated():
         one, two = create(client), create(client)
         view = turn(client, one, 'Hello')
         assert view['pending']['field'] == 'destination'
-        for answer, expected in [('Jaipur', 'start_date'), ('2099-12-10', 'days'), ('3', 'budget'),
-                                 ('15000', 'currency'), ('INR', 'interests'), ('History', 'companions')]:
+        for answer, expected in [('Jaipur', 'origin'), ('Delhi', 'days')]:
             view = turn(client, one, answer)
             assert view['pending']['field'] == expected
-        view = turn(client, one, 'solo')
+        view = turn(client, one, '3 days')
         assert view['result']['trip_id'] == one
         assert client.get(f'/api/conversations/{two}').json()['messages'] == []
 
@@ -125,16 +124,33 @@ def test_failed_plan_resumes_without_duplicate_messages(monkeypatch):
         assert restored['result']['trip_id'] == conversation_id
 
 
+def test_resending_same_failed_message_resumes_without_another_user_message(monkeypatch):
+    import app.conversations as conversations
+    original = conversations.planning_graph
+    class Failing:
+        async def ainvoke(self, *args, **kwargs):
+            raise RuntimeError('Temporary failure')
+    with TestClient(app) as client:
+        cid = create(client)
+        monkeypatch.setattr(conversations, 'planning_graph', Failing())
+        response = client.post(f'/api/conversations/{cid}/messages', json={'message': 'Plan my trip', 'details': complete_details()})
+        assert 'event: error' in response.text
+        monkeypatch.setattr(conversations, 'planning_graph', original)
+        restored = turn(client, cid, 'Plan my trip')
+        assert len([m for m in restored['messages'] if m['role'] == 'user']) == 1
+        assert restored['result']['trip_id'] == cid
+
+
 def test_invalid_duration_can_be_corrected():
     with TestClient(app) as client:
         conversation_id = create(client)
-        view = turn(client, conversation_id, 'Plan a Jaipur trip', {'start_date': '2099-12-10'})
+        view = turn(client, conversation_id, 'Plan a Jaipur trip', {'origin': 'Delhi', 'start_date': '2099-12-10'})
         assert view['pending']['field'] == 'days'
         view = turn(client, conversation_id, '20 days')
         assert view['pending']['field'] == 'days'
         view = turn(client, conversation_id, '3 days')
         assert view['details']['days'] == 3
-        assert view['pending']['field'] == 'budget'
+        assert view['pending'] is None
 
 
 def test_busy_and_invalid_timezone():
@@ -258,7 +274,7 @@ def test_plain_replies_work_during_gemini_outage(monkeypatch, question, message,
     assert state['details']['timezone'] == 'Asia/Calcutta'
 
 
-def test_date_reply_and_location_choice_complete_live_graph_during_primary_outage(monkeypatch):
+def test_date_reply_and_location_choice_complete_live_graph_during_primary_outage(monkeypatch, itinerary_payload):
     import app.agents as agents
     import app.conversations as conversations
     import app.llm as llm
@@ -287,30 +303,31 @@ def test_date_reply_and_location_choice_complete_live_graph_during_primary_outag
     calls = []
 
     class Model:
-        def __init__(self, name):
+        def __init__(self, name, schema):
             self.name = name
+            self.schema = schema
 
         async def ainvoke(self, messages):
             calls.append(self.name)
             if self.name == 'primary':
                 raise RuntimeError('503 UNAVAILABLE. high demand')
-            return agents.AgentOutput(answer='Day 1: Museum.\nDay 2: Local food.\nDay 3: Relax.\nPacking checklist: shoes, charger.', source_ids=['source-1'])
+            return self.schema.model_validate(itinerary_payload())
 
     async def no_wait(_):
         pass
 
     monkeypatch.setattr(llm.asyncio, 'sleep', no_wait)
-    monkeypatch.setattr(llm, 'structured_model', lambda name, *args: Model(name))
+    monkeypatch.setattr(llm, 'structured_model', lambda name, schema, *args: Model(name, schema))
     with TestClient(app) as client:
         cid = create(client)
         view = turn(client, cid, '2027-11-02', {'destination': 'Jaipur', 'days': 3})
         assert view['details']['start_date'] == '2027-11-02'
         assert view['details']['destination'] == 'Jaipur, Rajasthan, India'
-        assert view['pending']['field'] == 'budget'
-        view = turn(client, cid, 'Apply trip details', {'budget': 'flexible', 'currency': 'INR',
+        assert view['pending']['field'] == 'origin'
+        view = turn(client, cid, 'Apply trip details', {'origin': 'Delhi', 'budget': 'flexible', 'currency': 'INR',
             'interests': 'history', 'companions': 'solo'})
         assert view['pending'] is None
         assert 'Day 3' in view['result']['answer']
         assert 'Packing checklist' in view['result']['answer']
-        assert calls == ['primary', 'primary', 'fallback']
+        assert calls == ['primary', 'fallback']
         assert client.get(f'/api/conversations/{cid}').json()['result']['trip_id'] == cid
