@@ -248,7 +248,7 @@ def format_clock(minutes):
     return f'{minutes // 60:02d}:{minutes % 60:02d}'
 
 
-def render_schedule(plan, request, connectivity):
+def render_schedule(plan, request, connectivity, weather=None):
     data = plan.model_dump()
     start = date.fromisoformat(str(request['start_date']))
     lines = [plan.overview, '', 'Planning assumptions:',
@@ -276,6 +276,10 @@ def render_schedule(plan, request, connectivity):
     for day in plan.days:
         day_date = start + timedelta(days=day.day - 1)
         lines += ['', f'Day {day.day}: {day_date.isoformat()} — {day.base}']
+        forecast = (weather or {}).get(day.day)
+        if forecast:
+            from app.weather import weather_text
+            lines.append(weather_text(forecast))
         if day.review_note:
             lines.append('Needs review: ' + day.review_note)
             lines.extend(f'- Optional, unscheduled: {a.title} — {a.duration_minutes} min (estimate). {a.description}' for a in day.activities)
@@ -298,6 +302,9 @@ def render_schedule(plan, request, connectivity):
         if cursor < finish:
             lines.append(f'- {format_clock(cursor)}–{format_clock(finish)} | Flexible buffer / return to your base | {finish - cursor} min.')
         schedule.append({'day': day.day, 'date': day_date.isoformat(), 'base': day.base, 'status': 'scheduled', 'activities': slots})
+    for entry in schedule:
+        if weather and entry['day'] in weather:
+            entry['weather'] = weather[entry['day']]
     lines += ['', 'Suggested budget allocation:']
     lines.extend(f'- {i.category}: {request["currency"]} {i.amount}' for i in plan.budget_allocation)
     lines += ['', 'Packing checklist:', *['- ' + item for item in plan.packing_list], '', 'Before you travel:',

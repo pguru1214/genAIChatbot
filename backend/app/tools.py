@@ -1,6 +1,7 @@
 """Read-only, fixed-destination API adapters exposed as typed LangChain tools."""
 import asyncio
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 from langchain_core.tools import tool
@@ -86,11 +87,11 @@ async def get_weather(latitude: float, longitude: float, start_date: str, days: 
     """Fetch weather within the next 16 days. Never extrapolate unsupported forecast dates."""
     start = date.fromisoformat(start_date)
     end = start + timedelta(days=days - 1)
-    today = datetime.now(timezone.utc).date()
-    if start < today or end > today + timedelta(days=15):
+    today = datetime.now(ZoneInfo('Asia/Kolkata')).date()
+    if end < today or start > today + timedelta(days=15):
         return {'available': False, 'reason': 'Requested dates are outside this adapter’s 16-day forecast window.'}
     return await fetch('https://api.open-meteo.com/v1/forecast', {
-        'latitude': latitude, 'longitude': longitude, 'start_date': str(start), 'end_date': str(end),
+        'latitude': latitude, 'longitude': longitude, 'start_date': str(max(start, today)), 'end_date': str(min(end, today + timedelta(days=15))),
         'daily': 'temperature_2m_max,temperature_2m_min,precipitation_probability_max', 'timezone': 'auto',
     })
 
@@ -177,7 +178,7 @@ async def collect_evidence(request: dict, demo: bool) -> dict:
     districts = select_districts(route, request, request.get('_district_ids'))
     if route['scope'] in {'state', 'ut', 'district'}:
         evidence, errors = await collect_official(route, districts)
-        errors.append('This is a regional circuit suggestion. Weather requires a specific base town; no state-wide forecast is inferred.')
+        errors.append('This is a regional circuit suggestion; itinerary weather is checked for each daily base town, not the whole state.')
         if not districts:
             errors.append('Detailed district attraction records are not yet curated for this region; official pages provide the available research.')
         return {'mode': 'live', 'location': location, 'tourism_route': route,

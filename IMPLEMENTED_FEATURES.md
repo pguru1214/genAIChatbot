@@ -239,3 +239,10 @@ missing dates or preferences before generating the itinerary.
 - [Kerala Tourism](https://www.keralatourism.org/)
 - [Rajasthan Tourism](https://www.tourism.rajasthan.gov.in/)
 - [Open-Meteo geocoding parameters](https://open-meteo.com/en/docs/geocoding-api)
+# Daily weather forecasts
+
+- Live itineraries fetch Open-Meteo forecasts for each day's verified Indian base town, including state and district circuits.
+- Daily itinerary text and saved schedule entries include temperature range, rain probability, provider and retrieval time.
+- Trips crossing the 16-day forecast window retain forecasts for supported dates; remaining dates show an explicit availability notice.
+- Ambiguous base towns and provider outages do not interrupt itinerary generation or produce guessed forecasts.
+- Existing saved itineraries retain their original content; generate a new plan to include weather.

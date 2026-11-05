@@ -14,6 +14,7 @@ from app.tourism import destination_route, routing_candidates, select_districts,
 from app.planning import planning_defaults, clock_minutes
 from app.itinerary import connectivity_context, schedule_schema, render_schedule, demo_schedule, proposal_schema, prepare_schedule
 from app.errors import ModelResponseError
+from app.weather import itinerary_weather
 
 
 class AgentOutput(BaseModel):
@@ -153,6 +154,9 @@ async def itinerary(state: State) -> dict:
                 'assert a direct train, flight or bus exists. Do not invent service numbers, timetables, airport '
                 'or station names, tickets, live traffic or booking availability. Say not verified when unknown. '
                 'For state requests use only the selected districts as a manageable circuit, not the whole state. '
+                'Set each day base to one specific Indian town name, not a state, district, hotel or combined route. '
+                'Daily weather is attached by the backend after selecting these towns. Do not invent forecasts '
+                'or claim that the backend cannot retrieve weather for regional itineraries. '
                 'For district requests stay within that district. Use supplied evidence for named attractions, '
                 'opening information and facts; dated catalog references are not live verification. Missing '
                 'forecasts do not invalidate retrieved places. Report relevant research limitations in notes. '
@@ -165,7 +169,8 @@ async def itinerary(state: State) -> dict:
                                             'maximum_minutes_per_day': clock_minutes(request['day_end']) - clock_minutes(request['day_start']),
                                             'connectivity': state['connectivity']})),
         ], request, state['research'])
-    result = render_schedule(plan, request, state['connectivity'])
+    weather = await itinerary_weather(plan, request, state['research']) if get_settings().app_mode == 'live' else None
+    result = render_schedule(plan, request, state['connectivity'], weather)
     return {**result, 'agent_trace': [*state['agent_trace'], 'Itinerary Agent']}
 
 

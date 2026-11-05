@@ -26,11 +26,15 @@ def cleanup_test_database():
 @pytest.fixture(autouse=True)
 def isolate_official_tourism_network(monkeypatch):
     import app.tourism as tourism
+    import app.weather as weather
 
     async def unavailable(url):
         raise TimeoutError('Tests must explicitly mock tourism website content')
 
     monkeypatch.setattr(tourism, 'download_page', unavailable)
+    async def unavailable_weather(*args, **kwargs):
+        raise TimeoutError('Tests must explicitly mock weather responses')
+    monkeypatch.setattr(weather, 'fetch', unavailable_weather)
 
 
 @pytest.fixture
