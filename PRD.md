@@ -1,8 +1,9 @@
 # Travel Planning Chatbot — Product Requirements Document
 
-- **Version:** 1.0
+- **Version:** 1.1
+- **Updated:** 4 November 2026
 - **Finalized:** 21 October 2026
-- **Status:** Final V1 product and architecture baseline; implementation pending
+- **Status:** V1 target requirements; partial local starter implemented; LangGraph confirmed as the workflow engine
 - **Platform:** Responsive web application
 
 ## 1. Product overview
@@ -231,6 +232,14 @@ validation. Saved-plan actions can bypass research and itinerary generation.
 
 ### 7.2 Graph flow
 
+LangGraph is the required orchestration framework for this project. Its typed
+shared state and conditional edges fit selective travel research, itinerary
+refinement, and action previews. Checkpoints and human approval interrupts are
+required for conversations and external actions that must resume later.
+FastAPI owns HTTP endpoints and authorization; Gemini generates model responses;
+LangChain supplies model/tool bindings; LangGraph coordinates workflow execution.
+Reminder timing remains the responsibility of the dedicated background worker.
+
 ```mermaid
 flowchart TD
     UI[React interface] --> API[FastAPI authentication and ownership checks]
@@ -290,6 +299,62 @@ Use PostgreSQL-backed LangGraph checkpoints to resume clarification and approval
 interrupts. Check ownership on every start, stream, cancel, and resume request.
 Prevent competing runs from overwriting the same itinerary revision. A checkpoint
 restart must not replay a completed email or Calendar mutation.
+
+#### 7.4.1 LangGraph implementation requirements
+
+- Build the workflow with Python `StateGraph`, explicit nodes, and conditional
+  edges. Preserve the three specialist roles described in section 7.1.
+- Compile with a PostgreSQL-backed checkpointer for durable workflows. Initialize
+  its schema through a controlled setup step and manage connections through the
+  FastAPI application lifecycle.
+- Assign a stable, server-authorized `thread_id` to each trip conversation.
+  Give each execution its own run ID; follow-up messages reuse the conversation
+  thread after checking ownership and resolving any pending interrupt.
+- Use `interrupt()` for missing-input clarification and action approval, then
+  resume with `Command(resume=...)` on the same authorized thread. Validate the
+  response against the pending question or immutable proposal before proceeding.
+- Keep external writes in dedicated execution nodes after approval. Interrupted
+  nodes can restart from their beginning; avoid side effects before the interrupt
+  and protect execution with the durable action ledger.
+- Use reducers or separate state keys when parallel branches merge evidence.
+  Keep messages and evidence bounded; checkpoints do not replace trip records.
+- Adapt graph progress and permitted answer output to the SSE contract in section
+  7.6. A stream disconnect must not create a new graph execution.
+- Verify routing, same-thread follow-ups, restart recovery, rejected approvals,
+  execution budgets, and duplicate prevention before declaring this complete.
+
+#### 7.4.2 Existing starter and remaining work
+
+The local backend already declares LangGraph, LangChain, and the Gemini binding
+in `backend/pyproject.toml`. `backend/app/agents.py` defines a typed `StateGraph`
+with router, research, itinerary, action, and validation nodes. Research-only
+requests bypass itinerary generation; explicit email/Calendar requests produce
+previews. `backend/app/main.py` streams graph updates and validated answer chunks.
+
+The local-user guided conversation milestone adds a parent graph in
+`backend/app/conversations.py` with typed preference collection, clarification
+interrupts, same-thread resumption, and durable checkpoints. PostgreSQL uses the
+official PostgreSQL checkpointer; SQLite is the local test/development fallback.
+The parent graph checkpoints completed planning before a retry-safe trip save.
+The UI restores messages and collected details after refresh and supports
+follow-up preferences, streamed node progress, and recovery of failed turns.
+
+Account ownership, durable external-action approvals, itinerary revision history,
+reconnectable event replay, and token-level streaming remain target requirements.
+Runs are serialized within one backend process for local development. Google
+action execution is disabled. This milestone does not establish production
+readiness or completion of all acceptance criteria.
+
+The guided-flow reliability update processes ordinary field answers without an
+LLM call, resolves destination choices early, and supports explicitly selected
+flexible defaults for optional preferences. Temporary Gemini 5xx failures use
+bounded retries and an optional configured fallback; quota and authorization
+errors remain explicit. The UI renders updated plans after follow-up changes,
+even when the trip ID stays the same.
+
+Implementation references:
+- [LangGraph Python reference](https://reference.langchain.com/python/langgraph)
+- [Interrupt and resume semantics](https://reference.langchain.com/python/langgraph/types/interrupt)
 
 ### 7.5 Approval and external actions
 

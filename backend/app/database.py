@@ -29,6 +29,13 @@ class Proposal(Base):
     payload: Mapped[dict] = mapped_column(JSON)
 
 
+class Conversation(Base):
+    __tablename__ = 'conversations'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    title: Mapped[str] = mapped_column(String(200), default='New journey')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 url = get_settings().database_url
 engine = create_engine(url, connect_args={'check_same_thread': False} if url.startswith('sqlite') else {}, pool_pre_ping=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False)

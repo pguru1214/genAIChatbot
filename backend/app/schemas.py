@@ -13,6 +13,10 @@ class ChatRequest(BaseModel):
     timezone: str = 'Asia/Kolkata'
     intent: Literal['auto', 'research', 'plan', 'email', 'calendar'] = 'auto'
     trip_id: str | None = None
+    budget: str = ''
+    currency: str = ''
+    interests: str = ''
+    companions: str = ''
 
     @field_validator('message', 'destination')
     @classmethod

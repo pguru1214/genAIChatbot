@@ -171,11 +171,84 @@ quotas, availability, and data terms. Restart the backend. No paid service is
 enabled by the application. Free-tier availability is not guaranteed.
 
 Live mode calls Open-Meteo geocoding/weather, Wikipedia, Overpass, and Gemini.
-Ambiguous destinations need clarification; this starter may reject a lookup
-rather than silently pick the wrong location. Requests outside the forecast
+Ambiguous destinations pause the guided conversation with candidate locations.
+Reply with city, region, and country separated by commas (for example,
+`Jaipur, Rajasthan, India`); the geocoder filters against those explicit details.
+The quick planner may still reject ambiguous requests. Requests outside the forecast
 window are labelled unavailable. Provider outages can yield partial results.
 
 ## Agent architecture
+
+### Guided trip conversations
+
+Plain ISO dates (including `2027-11-02`), day counts, currency codes, common
+companion answers, location selections, and explicit detail-form updates are
+processed locally rather than sent to Gemini. The browser's `Asia/Calcutta`
+time-zone identifier is accepted. Location lookup runs early; when multiple
+places match, select a destination button instead of typing a long address.
+Once destination, departure and duration are known, **Build my plan with flexible
+preferences** fills only missing optional preferences and starts generation.
+
+The backend keeps the selected `GEMINI_MODEL` as primary. Set the optional
+`GEMINI_FALLBACK_MODEL` to an account-supported model to use it after temporary
+5xx failures. The primary gets one bounded retry; the fallback gets one attempt.
+Authentication failures and exhausted quotas do not trigger model switching.
+Wrapped Gemini 503 errors are reported as temporary service overload rather than
+an invalid date or an unknown workflow failure. Provider outages can still occur;
+no application can guarantee model availability. Secrets stay in `backend/.env`.
+
+The default **Plan through chat** view collects destination, departure date,
+duration (1–7 days), total budget, currency, interests, companions, and trip time
+zone. LangGraph pauses for missing details, resumes on the same conversation
+thread, and hands complete preferences to the research and itinerary workflow.
+The resulting itinerary and packing suggestions are saved automatically.
+
+Use **Review or edit trip details** to correct preferences. In demo mode this
+editor is the reliable way to supply details; its message parser supports only
+simple inputs such as `Plan a Jaipur trip`, ISO dates, and `3 days`. Live mode
+uses the configured Gemini model for natural-language extraction. Dates require
+an explicit year. Follow-up requests retain the trip preferences and previous
+plan. The starter replaces the current saved plan; revision history is still
+pending. Existing single-request planning and Google previews remain available
+under **Quick planner & saved previews**.
+
+Conversations, messages, and graph checkpoints persist in PostgreSQL when it is
+configured. Startup initializes the official PostgreSQL checkpointer tables;
+the database account needs table-creation permission for this development setup.
+SQLite development uses a companion `*.db.checkpoints` file. Keep both database
+files when backing up or restoring a SQLite conversation. The browser remembers
+the active conversation ID; **Continue a conversation** restores server history.
+
+Run one backend worker for this local-user milestone. Conversation runs are
+serialized and stale tabs receive a conflict instead of overwriting a newer
+checkpoint. After an interrupted or failed turn, reopen the conversation and use
+**Retry saved turn** to resume its checkpoint. SSE provides node progress and a
+final response; automatic stream replay and token streaming remain future work.
+Authentication and per-account isolation are not implemented; keep the service
+bound to localhost.
+
+New endpoints: `POST/GET /api/conversations`,
+`GET /api/conversations/{id}`, and
+`POST /api/conversations/{id}/messages` (SSE). Message requests include the latest
+`checkpoint_id`, `message`, browser `timezone`, and optional typed `details`
+overrides. Changed preferences override extraction from that message. Successful
+streams emit `conversation` then `completed`; errors preserve recoverable graph
+state. Conversation length is limited to 100 messages in this milestone.
+
+After updating dependencies, Git Bash setup is:
+
+```sh
+cd backend
+./.venv/Scripts/python.exe -m ensurepip --default-pip
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+./.venv/Scripts/python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+In a second terminal, run `cd frontend` and `npm run dev` from the repository root.
+Try `Plan a Jaipur trip`, answer the clarification, refresh, and continue. Backend
+regressions run with `python -m pytest -q`; frontend validation uses `npm run build`.
+
+### Specialist roles
 
 1. **Travel Research Agent:** typed read-only LangChain tools, parallel public API
    retrieval, evidence records; answers research-only questions.
@@ -191,8 +264,10 @@ is not implemented. Read provider/source data before relying on recommendations.
 
 The frontend consumes SSE from `POST /api/chat`: progress, validated answer
 chunks, completion, and safe errors. Answer chunks are emitted **after generation
-and validation**, not token-by-token from Gemini. Disconnect recovery, durable
-checkpoints, and approval/resume are future PRD work.
+and validation**, not token-by-token from Gemini. The guided conversation uses
+`POST /api/conversations/{id}/messages` for streamed progress and saved state,
+with durable clarification checkpoints and manual recovery. Automatic event replay,
+token-level streaming, and external-action approval/resume remain future work.
 
 ## Implemented and pending
 
@@ -207,8 +282,10 @@ checkpoints, and approval/resume are future PRD work.
 | Google sign-in, OAuth token management, user isolation | Pending |
 | Live email/Calendar actions and durable approvals | Pending |
 | Scheduled reminder worker | Pending |
-| Conversation history, packing checkboxes, itinerary revisions | Pending |
-| Durable graph checkpoints, reconnection, token streaming | Pending |
+| Conversation history, clarification/resume, saved trip preferences | Implemented for local use |
+| Durable conversation checkpoints and manual failed-turn recovery | Implemented |
+| Packing checkboxes, itinerary revision history | Pending |
+| Automatic stream replay and model-token streaming | Pending |
 | Alembic migrations, Tailwind, comprehensive PRD evaluations | Pending |
 
 **Bind to loopback only.** This starter is single-user development software with
@@ -252,6 +329,17 @@ JavaScript dependencies are locked in `frontend/package-lock.json`; use `npm ci`
 for repeatable installation. Never commit `.env`, `.venv`, or `node_modules`.
 
 ## Public data attribution
+
+Public research requests identify this project through its User-Agent, as
+required by [Wikimedia's policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy).
+Temporary network and server failures receive at most one retry. Overpass
+queries use form POST and can fall back from `overpass-api.de` to the public
+[Private.coffee instance](https://overpass.private.coffee/). Each instance has
+a 16-second deadline. Access-denied responses are not retried, and provider
+cooldowns are respected. Public servers can remain unavailable; the response
+shows which provider failed, while retaining successful research from others.
+Previously saved plans keep their original research results; generate a new plan
+after restarting the backend to verify a provider fix.
 
 Live results include source links. Wikipedia content is subject to its applicable
 CC BY-SA license and attribution requirements. OpenStreetMap data is ©

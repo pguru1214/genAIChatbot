@@ -91,7 +91,7 @@ async def test_ambiguous_location_requires_clarification(monkeypatch):
         return {'results': [{'name': 'Samecity', 'country': 'A'}, {'name': 'Samecity', 'country': 'B'}]}
 
     monkeypatch.setattr(tools, 'fetch', fake_fetch)
-    with pytest.raises(ValueError, match='Ambiguous'):
+    with pytest.raises(ValueError, match='more than one'):
         await tools.resolve_destination.ainvoke({'destination': 'Samecity'})
 
 
@@ -110,3 +110,47 @@ async def test_invalid_sources_fail_before_streaming(monkeypatch):
     monkeypatch.setattr(agents, 'generate', fake_generate)
     with pytest.raises(ValueError, match='unknown source'):
         await graph.ainvoke({'request': request(intent='research')})
+
+
+def test_quick_chat_reports_ambiguous_destination(monkeypatch):
+    import app.agents as agents
+    from app.tools import DestinationNeedsClarification
+
+    async def ambiguous(*args):
+        raise DestinationNeedsClarification('Which Jaipur? Use Jaipur, Rajasthan, India.')
+
+    monkeypatch.setattr(agents, 'collect_evidence', ambiguous)
+    with TestClient(app) as client:
+        response = client.post('/api/chat', json=request())
+        error = next(json.loads(line[6:]) for frame in response.text.split('\n\n')
+                     if frame.startswith('event: error') for line in frame.splitlines() if line.startswith('data: '))
+        assert error['code'] == 'destination_clarification'
+        assert 'Jaipur, Rajasthan, India' in error['message']
+        assert 'event: completed' not in response.text
+
+
+async def test_all_research_providers_down_returns_honest_empty_evidence(monkeypatch):
+    import app.tools as tools
+
+    async def fake_fetch(url, params):
+        if 'geocoding' in url:
+            return {'results': [{'name': 'Testcity', 'country': 'India', 'latitude': 26, 'longitude': 75}]}
+        raise TimeoutError('sensitive provider details')
+
+    monkeypatch.setattr(tools, 'fetch', fake_fetch)
+    result = await tools.collect_evidence({'destination': 'Testcity', 'days': 3}, False)
+    assert result['evidence'] == []
+    assert len(result['errors']) == 2
+    assert 'sensitive' not in json.dumps(result)
+
+
+def test_provider_error_details_are_not_exposed():
+    from app.errors import public_error
+
+    class QuotaError(Exception):
+        code = 429
+
+    error = public_error(QuotaError('api_key=secret-value'))
+    assert error['code'] == 'provider_quota'
+    assert 'secret-value' not in json.dumps(error)
+    assert 'secret-value' not in json.dumps(public_error(RuntimeError('api_key=secret-value')))
