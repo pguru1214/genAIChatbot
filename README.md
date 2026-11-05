@@ -7,9 +7,16 @@ default zero-configuration development fallback. **Docker is optional.**
 This is a runnable development foundation for [PRD.md](PRD.md), not a completed
 implementation of every PRD acceptance criterion. TripWeave is a working name.
 
+New planning is **India-only**. The tourism directory covers all states and UTs,
+with initial detailed records for 17 featured districts across six states.
+State requests use a tourism-source router and suggested regional circuits.
+Official pages are fetched on demand and cached; website availability and district
+coverage are explicitly reported. See [implemented features and limitations](IMPLEMENTED_FEATURES.md).
+
 ## Architecture reference
 
 - [Final V1 PRD](PRD.md)
+- [Implemented features](IMPLEMENTED_FEATURES.md)
 - [Database architecture](docs/DB_ARCHITECTURE.md): 18 application tables,
   provider data mapping, ownership, transactions, and migration plan.
 - [API architecture](docs/API_ARCHITECTURE.md): 37 target operations, request
@@ -170,7 +177,10 @@ Choose a model supported by your account after checking current Gemini free-tier
 quotas, availability, and data terms. Restart the backend. No paid service is
 enabled by the application. Free-tier availability is not guaranteed.
 
-Live mode calls Open-Meteo geocoding/weather, Wikipedia, Overpass, and Gemini.
+Live mode calls Open-Meteo geocoding/weather, Wikipedia, and Gemini. Nearby
+visitor places use Geoapify when `GEOAPIFY_API_KEY` is configured, otherwise
+Wikipedia GeoSearch with visitor-place category filtering. Geoapify failures
+fall back to Wikipedia. The default workflow no longer calls public Overpass.
 Ambiguous destinations pause the guided conversation with candidate locations.
 Reply with city, region, and country separated by commas (for example,
 `Jaipur, Rajasthan, India`); the geocoder filters against those explicit details.
@@ -276,6 +286,8 @@ token-level streaming, and external-action approval/resume remain future work.
 | React chat, destination/date inputs, saved plans | Implemented |
 | FastAPI, SQLite/PostgreSQL persistence | Implemented |
 | LangGraph routing, research/itinerary roles, typed API tools | Implemented |
+| India-only destination scope and nationwide tourism source registry | Implemented; detailed seeds cover 17 featured districts in six states |
+| State/district tourism source selection and official page cache | Implemented; on-demand refresh and explicit freshness/coverage limits |
 | Gemini structured outputs in live mode | Implemented; requires your credentials |
 | Progress SSE and validated answer chunks | Implemented |
 | Gmail/Calendar proposals | Preview only; approval endpoint returns 501 |
@@ -332,14 +344,21 @@ for repeatable installation. Never commit `.env`, `.venv`, or `node_modules`.
 
 Public research requests identify this project through its User-Agent, as
 required by [Wikimedia's policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy).
-Temporary network and server failures receive at most one retry. Overpass
-queries use form POST and can fall back from `overpass-api.de` to the public
-[Private.coffee instance](https://overpass.private.coffee/). Each instance has
-a 16-second deadline. Access-denied responses are not retried, and provider
+Temporary network and server failures receive at most one retry. Geoapify and
+Wikipedia place lookups each have a 16-second deadline. Access-denied responses
+are not retried, and provider
 cooldowns are respected. Public servers can remain unavailable; the response
 shows which provider failed, while retaining successful research from others.
 Previously saved plans keep their original research results; generate a new plan
 after restarting the backend to verify a provider fix.
+
+For the optional dedicated Places API, add your own `GEOAPIFY_API_KEY` to
+`backend/.env` and restart the backend. Keep it out of frontend code and Git.
+Without a key, named visitor places work through Wikipedia; article coverage is
+incomplete and does not verify opening hours, ticket prices, or availability.
+The UI displays provider attribution and expandable links to each retrieved
+place. The old Overpass adapter remains available for development, but is not
+part of normal plan generation.
 
 Live results include source links. Wikipedia content is subject to its applicable
 CC BY-SA license and attribution requirements. OpenStreetMap data is ©

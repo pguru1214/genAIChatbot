@@ -64,7 +64,7 @@ def test_full_plan_followup_and_no_duplicate_trip():
         assert result['pending'] is None
         assert result['result']['trip_id'] == conversation_id
         assert 'DEMO itinerary' in result['messages'][-1]['content']
-        assert result['result']['agent_trace'] == ['Travel Research Agent', 'Itinerary Agent']
+        assert result['result']['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Itinerary Agent']
         changed = turn(client, conversation_id, 'Make it four days', {'days': 4})
         assert changed['details']['days'] == 4
         assert changed['details']['interests'] == 'history and local food'
@@ -196,7 +196,8 @@ async def test_geocoder_respects_explicit_region_and_country(monkeypatch):
     import app.tools as tools
 
     async def fake_fetch(url, params):
-        assert params['name'] == 'Jaipur'
+        assert params['name'] == 'Jaipur, Rajasthan'
+        assert params['countryCode'] == 'IN'
         return {'results': [
             {'name': 'Jaipur', 'country': 'India', 'admin1': 'Rajasthan', 'latitude': 26, 'longitude': 75},
             {'name': 'Jaipur', 'country': 'Bangladesh', 'admin1': 'Sylhet', 'latitude': 25, 'longitude': 92}]}
@@ -205,7 +206,7 @@ async def test_geocoder_respects_explicit_region_and_country(monkeypatch):
     result = await tools.resolve_destination.ainvoke({'destination': 'Jaipur, Rajasthan, India'})
     assert result['country'] == 'India'
     import pytest
-    with pytest.raises(tools.DestinationNeedsClarification, match='Destination not found'):
+    with pytest.raises(tools.DestinationNeedsClarification, match='India only'):
         await tools.resolve_destination.ainvoke({'destination': 'Jaipur, Imaginary Region, India'})
 
 
@@ -304,8 +305,7 @@ def test_date_reply_and_location_choice_complete_live_graph_during_primary_outag
         cid = create(client)
         view = turn(client, cid, '2027-11-02', {'destination': 'Jaipur', 'days': 3})
         assert view['details']['start_date'] == '2027-11-02'
-        assert view['pending']['choices'] == ['Jaipur, Rajasthan, India', 'Jaipur, Sylhet, Bangladesh']
-        view = turn(client, cid, view['pending']['choices'][0], {'destination': view['pending']['choices'][0]})
+        assert view['details']['destination'] == 'Jaipur, Rajasthan, India'
         assert view['pending']['field'] == 'budget'
         view = turn(client, cid, 'Apply trip details', {'budget': 'flexible', 'currency': 'INR',
             'interests': 'history', 'companions': 'solo'})

@@ -30,7 +30,7 @@ def test_plan_stream_persist_delete():
     with TestClient(app) as client:
         response = client.post('/api/chat', json=request())
         result = stream_result(response)
-        assert result['agent_trace'] == ['Travel Research Agent', 'Itinerary Agent']
+        assert result['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Itinerary Agent']
         assert 'DEMO' in result['answer']
         assert response.text.index('event: progress') < response.text.index('event: completed')
         assert any(t['id'] == result['trip_id'] for t in client.get('/api/trips').json())
@@ -41,7 +41,7 @@ def test_plan_stream_persist_delete():
 def test_research_bypasses_planner():
     with TestClient(app) as client:
         result = stream_result(client.post('/api/chat', json=request(message='What is the weather?')))
-        assert result['agent_trace'] == ['Travel Research Agent']
+        assert result['agent_trace'] == ['India Tourism Router', 'Travel Research Agent']
         assert 'No live weather' in result['answer']
 
 
@@ -74,6 +74,8 @@ async def test_live_research_partial_failure(monkeypatch):
         if 'geocoding' in url:
             return {'results': [{'name': 'Testcity', 'country': 'India', 'latitude': 26, 'longitude': 75}]}
         if 'wikipedia' in url:
+            if params.get('generator') == 'geosearch':
+                return {'query': {'pages': {'1': {'title': 'Museum', 'categories': [{'title': 'Category:Museums'}]}}}}
             raise TimeoutError()
         return {'elements': [{'id': 123, 'type': 'node', 'tags': {'name': 'Museum', 'tourism': 'museum'}}]}
 
@@ -88,11 +90,35 @@ async def test_ambiguous_location_requires_clarification(monkeypatch):
     import app.tools as tools
 
     async def fake_fetch(url, params):
-        return {'results': [{'name': 'Samecity', 'country': 'A'}, {'name': 'Samecity', 'country': 'B'}]}
+        return {'results': [{'name': 'Samecity', 'country': 'India', 'admin1': 'A'}, {'name': 'Samecity', 'country': 'India', 'admin1': 'B'}]}
 
     monkeypatch.setattr(tools, 'fetch', fake_fetch)
     with pytest.raises(ValueError, match='more than one'):
         await tools.resolve_destination.ainvoke({'destination': 'Samecity'})
+
+
+async def test_goa_region_resolves_without_city_api(monkeypatch):
+    import app.tools as tools
+
+    async def fake_fetch(url, params):
+        raise AssertionError('State requests must resolve locally')
+
+    monkeypatch.setattr(tools, 'fetch', fake_fetch)
+    result = await tools.resolve_destination.ainvoke({'destination': 'Goa, India'})
+    assert result['scope'] == 'state'
+    assert result['country_code'] == 'IN'
+    assert 'latitude' not in result
+
+
+async def test_goa_in_another_country_is_rejected(monkeypatch):
+    import app.tools as tools
+
+    async def fake_fetch(url, params):
+        return {'results': [{'name': 'Goa', 'country': 'Philippines', 'latitude': 13.7, 'longitude': 123.5}]}
+
+    monkeypatch.setattr(tools, 'fetch', fake_fetch)
+    with pytest.raises(tools.DestinationNeedsClarification, match='India only'):
+        await tools.resolve_destination.ainvoke({'destination': 'Goa, Philippines'})
 
 
 async def test_invalid_sources_fail_before_streaming(monkeypatch):

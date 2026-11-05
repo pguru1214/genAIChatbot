@@ -19,6 +19,7 @@ from app.database import Conversation, Proposal, SessionLocal, Trip, get_db, ini
 from app.conversations import TurnRequest, build_conversation_graph, snapshot
 from app.schemas import ChatRequest
 from app.errors import public_error
+from app.tourism import directory
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,13 @@ app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins,
 @app.get('/api/health')
 def health():
     return {'status': 'ok', 'mode': get_settings().app_mode, 'google_execution': False,
-            'authentication': False, 'deployment': 'local-development-only'}
+            'authentication': False, 'deployment': 'local-development-only', 'destination_scope': 'India'}
+
+
+@app.get('/api/tourism/directory')
+def tourism_directory():
+    """Reviewed sources and explicit coverage, without fetching external pages."""
+    return directory()
 
 
 @app.post('/api/conversations', status_code=201)

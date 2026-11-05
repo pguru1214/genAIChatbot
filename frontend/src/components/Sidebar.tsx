@@ -1,44 +1,65 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ChevronDown, Plane, Ticket } from 'lucide-react'
+import { ChevronDown, MessageSquareText, PanelLeftClose, Plane, Plus, SlidersHorizontal, Ticket } from 'lucide-react'
+import type { ConversationSummary, Trip } from '../types'
 import { ease } from './ui'
 
-export type Trip = { id: string; destination: string; answer: string; mode: string }
 const preview = 3
 
-export function Sidebar({ trips, busy, activeId, onOpen }: { trips: Trip[]; busy: boolean; activeId?: string; onOpen: (trip: Trip) => void }) {
-  const [all, setAll] = useState(false)
-  const visible = all ? trips : trips.slice(0, preview)
-  return <aside>
+export function Sidebar({ mode, chats, activeChat, trips, activeTrip, busy, onNew, onQuickPlan, onChat, onTrip, onClose }: {
+  mode: string; chats: ConversationSummary[]; activeChat?: string; trips: Trip[]; activeTrip?: string; busy: boolean
+  onNew: () => void; onQuickPlan: () => void; onChat: (id: string) => void; onTrip: (trip: Trip) => void; onClose: () => void
+}) {
+  return <aside className="sidebar">
     <div className="stars" aria-hidden />
-    <motion.a className="brand" href="/" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .6, ease }}>
-      <motion.span className="brand-mark" whileHover={{ rotate: -18, scale: 1.08 }}><Plane size={18} /></motion.span>
-      TripWeave
-    </motion.a>
-    <p className="tagline">A little curiosity.<br />A better journey.</p>
+    <div className="side-top">
+      <a className="brand" href="/">
+        <motion.span className="brand-mark" whileHover={{ rotate: -18, scale: 1.08 }}><Plane size={17} /></motion.span>TripWeave
+      </a>
+      <button className="side-icon" aria-label="Hide sidebar" onClick={onClose}><PanelLeftClose size={18} /></button>
+    </div>
 
-    <h2><Ticket size={13} /> Your journeys</h2>
-    {trips.length === 0 && <p className="empty">Your saved plans will appear here, stamped and ready to revisit.</p>}
-    <nav>
-      <AnimatePresence initial={false}>
-        {visible.map((trip, i) => <motion.button key={trip.id} layout disabled={busy} className={'trip' + (trip.id === activeId ? ' active' : '')} onClick={() => onOpen(trip)}
-          initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(i, 8) * .05, duration: .45, ease }}
-          whileHover={busy ? undefined : { x: 4 }} whileTap={busy ? undefined : { scale: .98 }}>
+    <motion.button className="new-trip" onClick={onNew} disabled={busy} whileHover={{ y: -1 }} whileTap={{ scale: .98 }}><Plus size={17} /> New trip</motion.button>
+    <button className="side-link" onClick={onQuickPlan}><SlidersHorizontal size={15} /> Quick plan with a form</button>
+
+    <div className="side-scroll">
+      <Section title="Recent chats" icon={<MessageSquareText size={13} />} empty="Your conversations will appear here." count={chats.length}>
+        {limit => chats.slice(0, limit).map((chat, i) => <Row key={chat.id} i={i} active={chat.id === activeChat} disabled={busy} onClick={() => onChat(chat.id)}>
+          <span className="row-title">{chat.title || 'Untitled trip'}</span>
+        </Row>)}
+      </Section>
+      <Section title="Saved itineraries" icon={<Ticket size={13} />} empty="Finished plans are stamped and kept here." count={trips.length}>
+        {limit => trips.slice(0, limit).map((trip, i) => <Row key={trip.id} i={i} active={trip.id === activeTrip} disabled={busy} onClick={() => onTrip(trip)}>
           <span className="trip-code">{code(trip.destination)}</span>
-          <span className="trip-body"><span className="trip-name">{trip.destination}</span><span className="trip-mode">{trip.mode} plan</span></span>
-        </motion.button>)}
-      </AnimatePresence>
-    </nav>
-    {trips.length > preview && <button className="more" onClick={() => setAll(v => !v)} aria-expanded={all}>
-      {all ? 'Show less' : `View all ${trips.length} journeys`}
-      <motion.span animate={{ rotate: all ? 180 : 0 }} style={{ display: 'inline-flex' }}><ChevronDown size={14} /></motion.span>
-    </button>}
+          <span className="row-body"><span className="row-title">{trip.destination}</span><span className="row-sub">{trip.mode} plan</span></span>
+        </Row>)}
+      </Section>
+    </div>
 
-    <div className="aside-note">
-      <div className="globe" aria-hidden><span /></div>
-      Built with Gemini, LangGraph &amp; LangChain.<br />Three specialists. One travel companion.
+    <div className="side-foot">
+      <span className={'badge ' + mode}><span className="pulse" />{mode} mode</span>
+      <p>Gemini · LangGraph · LangChain<br />Your travel companion for India.</p>
     </div>
   </aside>
+}
+
+function Section({ title, icon, empty, count, children }: { title: string; icon: React.ReactNode; empty: string; count: number; children: (limit: number) => React.ReactNode }) {
+  const [all, setAll] = useState(false)
+  return <section className="side-section">
+    <h2>{icon}{title}</h2>
+    {count === 0 ? <p className="side-empty">{empty}</p> : <nav><AnimatePresence initial={false}>{children(all ? count : preview)}</AnimatePresence></nav>}
+    {count > preview && <button className="more" onClick={() => setAll(v => !v)} aria-expanded={all}>
+      {all ? 'Show less' : `View all ${count}`}
+      <motion.span animate={{ rotate: all ? 180 : 0 }} style={{ display: 'inline-flex' }}><ChevronDown size={14} /></motion.span>
+    </button>}
+  </section>
+}
+
+function Row({ i, active, disabled, onClick, children }: { i: number; active: boolean; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
+  return <motion.button layout className={'side-row' + (active ? ' active' : '')} disabled={disabled} onClick={onClick} aria-current={active || undefined}
+    initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(i, 6) * .04, duration: .4, ease }}>
+    {children}
+  </motion.button>
 }
 
 /** Airport-style three-letter code for a destination, e.g. "Jaipur, India" → "JAI". */

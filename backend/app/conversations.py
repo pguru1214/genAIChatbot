@@ -17,6 +17,7 @@ from app.database import SessionLocal, Trip
 from app.schemas import ChatRequest
 from app.tools import DestinationNeedsClarification, resolve_destination
 from app.llm import invoke_structured
+from app.tourism import destination_route, INDIA_ONLY
 
 
 class TripDetails(BaseModel):
@@ -65,7 +66,7 @@ class TurnRequest(BaseModel):
 
 
 QUESTIONS = [
-    ('destination', 'Where would you like to travel? Include the city and country if needed.'),
+    ('destination', 'Where in India would you like to travel? Choose a state, union territory, district or city.'),
     ('start_date', 'What is your departure date? Please include the year (YYYY-MM-DD).'),
     ('days', 'How many days will you travel? This first version supports 1–7 days.'),
     ('budget', 'What is your approximate total trip budget? You can also say “flexible”.'),
@@ -110,6 +111,13 @@ def demo_extract(message: str, current: dict, question: str) -> dict:
 def direct_reply(message: str, question: str) -> dict | None:
     """Known answer formats must not depend on an available language model."""
     text = message.strip()
+    if question in {'', 'destination'} and len(text) <= 200:
+        try:
+            route = destination_route(text)
+            if route.get('region_id'):
+                return {'destination': route['destination']}
+        except DestinationNeedsClarification:
+            return {'destination': text}
     if re.fullmatch(r'\d{4}-\d{2}-\d{2}', text):
         return {'start_date': text}
     if question == 'days' and re.fullmatch(r'\d+\s*(?:days?)?', text, re.I):
@@ -138,6 +146,7 @@ def collect(state: ConversationState):
         extracted = invoke_structured(TripDetails, [
             SystemMessage(content=(
                 'Extract ONLY trip details explicitly stated in the latest user message, using the '
+                'India-only travel scope. Preserve an explicitly requested foreign destination so it can be rejected; never substitute an Indian place. '
                 'current details and pending question as context. Null means unchanged or unknown. '
                 'Do not invent a destination, dates, budget, interests, companions or currency. '
                 'Dates must be YYYY-MM-DD with an explicit year; ask rather than guessing a year. '
@@ -162,9 +171,17 @@ def collect(state: ConversationState):
         invalid_field = str(error.errors()[0]['loc'][0])
         details.pop(invalid_field, None)
     question = invalid_field or next((key for key, _ in QUESTIONS if not details.get(key)), '')
+    location_question = ''
+    if details.get('destination'):
+        try:
+            route = destination_route(details['destination'])
+            if get_settings().app_mode == 'demo' and not route.get('region_id'):
+                raise DestinationNeedsClarification(INDIA_ONLY + ' Choose a directory destination in demo mode.')
+        except DestinationNeedsClarification as error:
+            question, location_question = 'destination', str(error)
     if details.get('start_date') and date.fromisoformat(details['start_date']) < datetime.now(ZoneInfo(details['timezone'])).date():
         question = 'start_date'
-    return {'details': details, 'question': question, 'result': None, 'location_question': '', 'location_choices': [],
+    return {'details': details, 'question': question, 'result': None, 'location_question': location_question, 'location_choices': [],
             'previous_plan': (state.get('result') or {}).get('answer', state.get('previous_plan', '')),
             'messages': [*state.get('messages', []), {'role': 'user', 'content': turn['message']}]}
 
@@ -181,6 +198,8 @@ def clarify(state: ConversationState):
 
 
 def next_step(state: ConversationState):
+    if state.get('location_question'):
+        return 'clarify'
     if get_settings().app_mode == 'live' and state['details'].get('destination') and state.get('resolved_input') != state['details']['destination']:
         return 'resolve'
     return 'clarify' if state['question'] else 'plan'

@@ -36,6 +36,13 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class TourismPage(Base):
+    __tablename__ = 'tourism_page_cache'
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    url: Mapped[str] = mapped_column(String(500))
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
 url = get_settings().database_url
 engine = create_engine(url, connect_args={'check_same_thread': False} if url.startswith('sqlite') else {}, pool_pre_ping=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False)

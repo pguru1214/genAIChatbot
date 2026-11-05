@@ -4,6 +4,10 @@ from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from langchain_core.tools import tool
+from app.config import get_settings
+from app.places import geoapify_places, wikipedia_places
+from app.tourism import (DestinationNeedsClarification, INDIA_ONLY, destination_route,
+                         region_location, directory, region_for, collect_official, select_districts)
 
 
 HEADERS = {'User-Agent': 'TripWeave/0.1 (https://github.com/pguru1214/genAIChatbot; local travel research)',
@@ -42,28 +46,30 @@ async def fetch(url: str, params: dict):
                 await asyncio.sleep(0.5)
 
 
-class DestinationNeedsClarification(ValueError):
-    """A safe, public location question that can be shown to the user."""
-
-    def __init__(self, message: str, choices: list[str] | None = None):
-        super().__init__(message)
-        self.choices = choices or []
-
-
 @tool
 async def resolve_destination(destination: str) -> dict:
-    """Resolve a destination into candidate cities and coordinates; ambiguity needs user input."""
+    """Resolve Indian states/districts locally or Indian cities with verified coordinates."""
+    route = destination_route(destination)
+    if route['scope'] in {'state', 'ut', 'district'}:
+        return region_location(route)
     parts = [part.strip() for part in destination.split(',') if part.strip()]
     city = parts[0] if parts else destination
-    data = await fetch('https://geocoding-api.open-meteo.com/v1/search', {'name': city, 'count': 10, 'language': 'en'})
-    candidates = data.get('results', [])
+    if route.get('district_id'):
+        district = next(d for d in directory()['districts'] if d['id'] == route['district_id'])
+        # Provider canonical aliases (Panaji -> Panjim, Margao -> Madgaon).
+        city = {'panaji': 'Panjim', 'margao': 'Madgaon', 'mysuru': 'Mysore',
+                'cochin': 'Kochi', 'alappuzha': 'Alleppey'}.get(city.casefold(), city)
+    data = await fetch('https://geocoding-api.open-meteo.com/v1/search',
+                       {'name': city + (', ' + parts[1] if len(parts) > 1 else ''),
+                        'count': 20, 'language': 'en', 'countryCode': 'IN'})
+    candidates = [c for c in data.get('results', []) if c.get('country_code') == 'IN' or c.get('country') == 'India']
     if len(parts) > 1:
         candidates = [candidate for candidate in candidates if all(
             hint.casefold() in {str(candidate.get(key, '')).casefold()
                                for key in ['country', 'country_code', 'admin1', 'admin2', 'admin3', 'admin4']}
             for hint in parts[1:])]
     if not candidates:
-        raise DestinationNeedsClarification('Destination not found. Please give the city, region, and country, separated by commas.')
+        raise DestinationNeedsClarification(INDIA_ONLY + ' I could not verify that destination. Try city, state, India.')
     # Prefer an exact city name; never silently choose among multiple exact matches.
     exact = [c for c in candidates if c['name'].casefold() == city.casefold()]
     options = exact or candidates
@@ -71,7 +77,8 @@ async def resolve_destination(destination: str) -> dict:
         choices = list(dict.fromkeys(', '.join(str(value) for value in [c['name'], c.get('admin1'), c.get('country')] if value) for c in options))
         raise DestinationNeedsClarification(f'I found more than one place named {city}. Please select the city you mean.', choices)
     c = options[0]
-    return {k: c.get(k) for k in ['name', 'admin1', 'country', 'latitude', 'longitude', 'timezone']}
+    return {**{k: c.get(k) for k in ['name', 'admin1', 'country', 'latitude', 'longitude', 'timezone']},
+            'country_code': 'IN', 'scope': 'city'}
 
 
 @tool
@@ -130,23 +137,61 @@ async def search_attractions(latitude: float, longitude: float) -> dict:
     ]}
 
 
+@tool
+async def get_visitor_places(latitude: float, longitude: float) -> dict:
+    """Find sourced visitor places using Geoapify if configured, otherwise Wikipedia. No Overpass dependency."""
+    api_key = get_settings().geoapify_api_key
+    if api_key:
+        try:
+            async with asyncio.timeout(16):
+                result = await geoapify_places(latitude, longitude, api_key, fetch)
+            if result['places']:
+                return result
+        except (httpx.HTTPError, ValueError, TimeoutError):
+            pass
+        async with asyncio.timeout(16):
+            result = await wikipedia_places(latitude, longitude, fetch)
+        result['notices'] = ['Geoapify returned no usable place data; using sourced Wikipedia nearby places instead.']
+        return result
+    async with asyncio.timeout(16):
+        return await wikipedia_places(latitude, longitude, fetch)
+
+
 async def collect_evidence(request: dict, demo: bool) -> dict:
+    route = request.get('_tourism_route') or destination_route(request['destination'])
     if demo:
+        if not route.get('region_id'):
+            raise DestinationNeedsClarification(INDIA_ONLY + ' In demo mode, choose a destination from the tourism directory.')
         return {'mode': 'demo', 'location': {'name': request['destination']}, 'evidence': [
             {'id': 'demo-1', 'provider': 'Sample data', 'retrieved_at': datetime.now(timezone.utc).isoformat(),
              'data': {'summary': 'Illustrative data only. Enable live mode for destination-specific research.',
                       'places': [{'name': 'Sample museum'}, {'name': 'Sample city park'}]}, 'url': None}
         ], 'errors': []}
-    location = request.get('_resolved_location') or await resolve_destination.ainvoke({'destination': request['destination']})
+    location = request.get('_resolved_location')
+    if not location or not (location.get('country_code') == 'IN' or location.get('country') == 'India'):
+        location = await resolve_destination.ainvoke({'destination': request['destination']})
+    if not route.get('region_id'):
+        region = region_for(location.get('admin1', ''))
+        if region:
+            route = {**route, 'region_id': region['id'], 'state': region['name']}
+    districts = select_districts(route, request, request.get('_district_ids'))
+    if route['scope'] in {'state', 'ut', 'district'}:
+        evidence, errors = await collect_official(route, districts)
+        errors.append('This is a regional circuit suggestion. Weather requires a specific base town; no state-wide forecast is inferred.')
+        if not districts:
+            errors.append('Detailed district attraction records are not yet curated for this region; official pages provide the available research.')
+        return {'mode': 'live', 'location': location, 'tourism_route': route,
+                'selected_districts': [d['name'] for d in districts], 'evidence': evidence, 'errors': errors}
     coords = {'latitude': location['latitude'], 'longitude': location['longitude']}
-    jobs = [get_destination_summary.ainvoke({'destination': request['destination']}), search_attractions.ainvoke(coords)]
-    names = ['Wikipedia', 'OpenStreetMap']
-    urls = ['https://en.wikipedia.org', 'https://www.openstreetmap.org/copyright']
+    jobs = [get_destination_summary.ainvoke({'destination': request['destination']}), get_visitor_places.ainvoke(coords)]
+    names = ['Wikipedia', 'Nearby visitor places']
+    urls = ['https://en.wikipedia.org', 'https://en.wikipedia.org/wiki/Special:Nearby']
     if request.get('start_date'):
         jobs.append(get_weather.ainvoke({**coords, 'start_date': request['start_date'], 'days': request['days']}))
         names.append('Open-Meteo')
         urls.append('https://open-meteo.com/')
-    results = await asyncio.gather(*jobs, return_exceptions=True)
+    official_job = collect_official(route, districts)
+    *results, official = await asyncio.gather(*jobs, official_job, return_exceptions=True)
     evidence, errors = [], []
     for index, (name, url, result) in enumerate(zip(names, urls, results)):
         if isinstance(result, Exception):
@@ -160,9 +205,19 @@ async def collect_evidence(request: dict, demo: bool) -> dict:
                 reason = 'lookup could not finish'
             errors.append(f'{name} unavailable ({reason}); no information inferred from this provider.')
         else:
-            evidence.append({'id': f'source-{index + 1}', 'provider': name, 'url': result.get('url') or url,
-                             'retrieved_at': datetime.now(timezone.utc).isoformat(), 'data': result})
+            errors.extend(result.get('notices', []))
+            if index == 1 and not result.get('places'):
+                errors.append('No nearby visitor places were found in the selected source; the itinerary may include general suggestions.')
+            evidence.append({'id': f'source-{index + 1}', 'provider': result.get('provider', name), 'url': result.get('url') or url,
+                             'retrieved_at': datetime.now(timezone.utc).isoformat(), 'data': result,
+                             'attribution': result.get('attribution'), 'attribution_url': result.get('attribution_url')})
     # A provider outage must not erase the conversation. The planner can return
     # a provisional general outline, with no factual claims or source IDs, and
     # the UI displays the provider failures alongside it.
-    return {'mode': 'live', 'location': location, 'evidence': evidence, 'errors': errors}
+    if isinstance(official, Exception):
+        errors.append('Official tourism information could not be retrieved; using available sources.')
+    else:
+        extra, notices = official
+        evidence.extend(extra)
+        errors.extend(notices)
+    return {'mode': 'live', 'location': location, 'tourism_route': route, 'evidence': evidence, 'errors': errors}

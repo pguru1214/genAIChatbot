@@ -1,14 +1,14 @@
 # Travel Planning Chatbot — Product Requirements Document
 
-- **Version:** 1.1
-- **Updated:** 4 November 2026
+- **Version:** 1.2
+- **Updated:** 5 November 2026
 - **Finalized:** 21 October 2026
 - **Status:** V1 target requirements; partial local starter implemented; LangGraph confirmed as the workflow engine
 - **Platform:** Responsive web application
 
 ## 1. Product overview
 
-Build a conversational travel assistant that helps users discover destinations,
+Build an India-only conversational travel assistant that helps users discover destinations,
 check weather, explore attractions, create itineraries, and prepare packing
 checklists. Users can save plans, send approved itineraries through Gmail, and
 add approved activities to Google Calendar.
@@ -21,6 +21,9 @@ are required V1 capabilities.
 V1 uses open-source software and eligible free API tiers. Free services have
 quotas and terms; unlimited free usage and always-on free hosting are not promised.
 This document defines the target product, not currently implemented capabilities.
+See [IMPLEMENTED_FEATURES.md](IMPLEMENTED_FEATURES.md) for the current implementation,
+coverage limits and validation status. Earlier international examples and saved
+plans do not expand the supported destination scope.
 
 ## 2. Goals and target users
 
@@ -30,7 +33,8 @@ This document defines the target product, not currently implemented capabilities
 - Support preparation, saved plans, email delivery, and reminders.
 
 Target users are individual travelers, students, families, and small groups
-planning leisure trips. Each trip belongs to one account; shared editing is
+planning leisure trips within India. Travelers may come from any country;
+the restriction concerns destinations. Each trip belongs to one account; shared editing is
 outside V1.
 
 ## 3. Core user journey
@@ -72,6 +76,41 @@ have a moderate budget, and want a packing checklist.”
 - Suggest destinations based on user preferences.
 - Ask users to disambiguate places with similar names.
 - Label recommendations as suggestions, not confirmed availability.
+- Support Indian state/UT, district and city requests; reject international
+  destinations with a helpful India-only clarification, retaining other trip details.
+
+#### 4.3.1 India tourism directory and research routing
+
+- Maintain a versioned source registry for all 28 states and 8 union territories,
+  with canonical names, aliases, official state/UT portals and Incredible India
+  references. Keep district tourism sources and featured attraction names linked
+  to their state/UT and source URLs.
+- Start detailed coverage with Goa, Telangana, Andhra Pradesh, Karnataka, Kerala
+  and Rajasthan; expand district records incrementally. Expose coverage honestly:
+  a registered state portal does not mean every district has curated attractions.
+- Use an India Tourism Router node before travel-provider research. Identify
+  destination scope, rank relevant districts using interests and trip length,
+  and select only registered source IDs. The backend owns URLs and validates
+  model choices; model-generated addresses are never fetched.
+- Resolve registered regions locally. Apply India country filtering to city
+  geocoding and validate returned countries and explicit regional qualifiers.
+  Old checkpoints cannot authorize foreign destination research.
+- For state requests, suggest a manageable circuit rather than demand a city or
+  promise an entire-state tour. Initially select one district for 1–3 days,
+  at most two for 4–5 days, and at most three for 6–7 days, within a curated
+  geographic cluster. Treat these as suggestions, not verified driving routes.
+- Retrieve selected official pages with bounded requests and response sizes.
+  Cache successful page extracts for 24 hours. During an outage, allow clearly
+  labeled cached extracts less than seven days old; otherwise fall back to a
+  registered national source and dated directory references.
+- Record source URL, retrieval/review date and freshness. Do not treat directory
+  entries as current availability checks. Do not claim “most visited” without
+  supporting visitor statistics; use “featured” or “recommended.”
+- A regional request must not receive a single forecast presented as statewide
+  weather. Explain when a specific base town is needed for a forecast.
+- Follow each website's access and reuse policies; do not bypass access controls
+  or crawl arbitrary links. Scheduled refresh and broader ingestion are follow-up
+  work; the initial implementation refreshes selected sources on demand.
 
 ### 4.4 Weather
 
@@ -153,6 +192,8 @@ have a moderate budget, and want a packing checklist.”
 - Implement exactly three specialist agents for V1: Travel Research, Itinerary,
   and Action. A supervisor/router node coordinates them; it is not a fourth
   specialist agent.
+- Add the India Tourism Router as a source-selection node. It may use a bounded
+  Gemini call for state-level district selection, with deterministic fallback.
 - Invoke only the agents required by a request. A weather question must not
   invoke itinerary generation or action preparation.
 - Execute independent retrieval tools concurrently after resolving location
@@ -200,8 +241,10 @@ external information API. OpenAI API is not part of the agreed V1 stack.
 | Google Gemini API | Understand requests and generate plans from retrieved data | Select an eligible free-tier model; verify current model, regional, quota, and data-handling terms |
 | Open-Meteo | Weather forecasts | Confirm eligibility, usage limits, and attribution terms |
 | Open-Meteo Geocoding | Resolve destination candidates and coordinates | Verify coverage and terms; ask users to resolve ambiguity |
+| Official state/UT and district tourism websites; Incredible India | India destination and attraction references | Registered URLs only; bounded HTML retrieval, dated cache and explicit coverage/freshness; respect source reuse policies |
 | Wikipedia / MediaWiki | Destination summaries and references | Follow attribution and content licensing requirements |
-| OpenStreetMap Overpass | Attractions and nearby services | Respect public endpoint policies, attribution, caching, and incomplete coverage |
+| Geoapify Places (optional key) | Categorized attractions and nearby services | Respect quota and attribution; fall back to Wikipedia nearby places |
+| Wikipedia GeoSearch | Nearby visitor-place candidates and article references | Filter categories; incomplete coverage; no verified hours or booking availability |
 | Gmail API | Approved email delivery | OAuth authorization, sending quotas, and possible verification requirements |
 | Google Calendar API | Approved events and reminders | OAuth authorization, quotas, and duplicate prevention |
 | Google Identity Services / OAuth | Identity and authorization | Separate sign-in permissions from Gmail/Calendar permissions |
@@ -215,7 +258,8 @@ implementation and public launch. This PRD does not certify current provider ter
 
 | Agent | Responsibility | Allowed capabilities |
 | --- | --- | --- |
-| Travel Research Agent | Resolve locations, retrieve destination/attraction/weather evidence, summarize research | Read-only geocoding, Wikipedia, Overpass, and forecast tools |
+| India Tourism Router (routing node) | Identify Indian destination scope and select registered district/source IDs | Local registry and bounded structured Gemini selection; no arbitrary URL generation or external writes |
+| Travel Research Agent | Resolve locations, retrieve destination/attraction/weather evidence, summarize research | Read-only geocoding, Wikipedia summaries/nearby places, optional Geoapify, and forecast tools |
 | Itinerary Agent | Generate or revise day plans and packing lists from preferences and evidence | Read relevant trip data and produce structured proposals; no external writes |
 | Action Agent | Prepare email, Calendar, and reminder proposals from the selected itinerary revision | Read approved trip context and prepare typed action proposals; execution remains backend-controlled |
 
@@ -246,7 +290,8 @@ flowchart TD
     API --> Router[LangGraph supervisor and shared state]
     Router --> Clarify[Clarification and wait]
     Clarify --> Router
-    Router --> Research[Travel Research Agent]
+    Router --> India[India-only scope and tourism source selection]
+    India --> Research[Travel Research Agent]
     Research --> Geo[Resolve location and dates]
     Geo --> Weather[Weather lookup]
     Geo --> Places[Destination and attraction lookups]
@@ -541,6 +586,7 @@ display and scheduling.
 | --- | --- |
 | 1 — Foundation | React, FastAPI, PostgreSQL, authentication, domain schemas, trip storage |
 | 2 — Reliable tools | Typed API adapters, geocoding, evidence records, fixtures, error handling |
+| India coverage increment | India-only enforcement, nationwide source registry, initial featured district catalog, source routing, official page cache and state circuits; then wider district coverage and refresh automation |
 | 3 — Agent orchestration | Three agents, LangChain/Gemini integration, LangGraph routing, parallel research, checkpoints, bounded execution |
 | 4 — Planning and streaming | Itineraries, packing, follow-up edits, revisions, SSE events, validated final answers |
 | 5 — Approved integrations | Gmail/Calendar proposals, durable approvals, execution ledger, duplicate prevention |
@@ -562,7 +608,7 @@ and provider choices must still be verified during implementation:
 - Local versus hosted deployment, worker availability, encryption-key management,
   and supported OAuth callback origins.
 - Authentication library, minimal OAuth scopes, and Google verification needs.
-- Geographic coverage, geocoder suitability, Overpass endpoint policies, caching,
+- Geographic coverage, geocoder suitability, Geoapify/Wikipedia policies, caching,
   and attribution presentation.
 - Model/tool/time budgets and timeout settings based on measured API behavior.
 - Approval expiry, stream replay retention, checkpoint/evidence retention, and
@@ -570,7 +616,7 @@ and provider choices must still be verified during implementation:
 
 ## 15. Final scope summary
 
-V1 delivers a travel-planning web application with exactly three specialist
+V1 delivers an India-only travel-planning web application with exactly three specialist
 agents, LangGraph orchestration, LangChain integrations, Gemini generation,
 PostgreSQL persistence, live travel information, streamed responses, and approved
 Gmail/Calendar actions. Backend guardrails, evidence grounding, persistent
