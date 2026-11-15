@@ -9,6 +9,7 @@ import { PreferencesPanel, useFoodStays } from './FoodStays'
 import { Overview } from './Overview'
 import { RouteArt } from './RouteArt'
 import { RouteJourney } from './RouteJourney'
+import { TransportSearch } from './TransportSearch'
 import { Notice, Sources, ease } from './ui'
 
 type Tab = 'journey' | 'overview' | 'details' | 'sources'
@@ -93,6 +94,7 @@ export function TripPanel({ plan, conv, actionBusy, onAction, onClose, onUpdate 
               <RouteJourney stops={routeStops} mode={mode} suggested={suggested} options={plan.result?.structured_plan?.transport_options ?? []}
                 activeDay={activeDay} onPickDay={setActiveDay} onMode={pickMode}
                 caption={<><b>{routeStops.length} stops</b> · {days.length} {days.length === 1 ? 'day' : 'days'}</>} />
+              <TransportSearch key={tripKey} mode={mode} details={details} days={days} />
               {fs.data?.notice && <Notice>{fs.data.notice}</Notice>}
               {fs.error && fs.data && <Notice tone="error" role="alert">{fs.error}</Notice>}
               <PreferencesPanel fs={fs} open={prefsOpen} onClose={() => setPrefsOpen(false)} />

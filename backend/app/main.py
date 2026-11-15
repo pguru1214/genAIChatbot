@@ -334,5 +334,7 @@ async def overnight_review(trip_id: str, choice: StopChoice, preferences: Servic
 
 
 # Register after every API route so the frontend cannot shadow /api endpoints.
+from app.transport import router as transport_router
+app.include_router(transport_router)
 from app.deployment import configure_deployment
 configure_deployment(app)

@@ -177,21 +177,22 @@ have a moderate budget, and want a packing checklist.”
 - Preserve itinerary revisions when saved plans change.
 - Treat budget guidance as approximate; verified booking totals are outside V1.
 
-#### Deferred enhancement: automatic free-only transport suggestions
+#### Automatic free-only transport suggestions
 
-Status: agreed on 15 November 2026 for a personal demo; implementation is deferred.
-This does not change the current estimate-and-verification-link behavior above
-or add a release requirement to V1.
+Status: search adapters and journey UI implemented for the personal demo.
+Train and cached flight searches require optional free provider credentials;
+the owner has not created these accounts yet. Booking links work without keys.
+Selecting a service and automatically reconciling itinerary timings remain deferred.
 
 - Once origin, destination, journey dates, and passenger count are known,
   automatically search supported providers for outward and return journeys.
   Compare buses, trains, and flights where sensible, and recommend the cheapest,
   fastest, and best-fit options among the results actually received.
-- Train candidate: evaluate RailCore's free personal/evaluation tier, currently
-  advertised as 2,000 requests per month. Verify date-specific journey search,
-  fares, availability, accuracy, and coverage before integration.
+- Train integration: RailCore's free personal/evaluation tier currently advertises
+  500 requests per month. Date-specific schedules and separate seat enquiries are
+  supported; local limits stop calls below the advertised free allowance.
   Reference: https://railcore.tech/pricing
-- Flight candidate: evaluate Travelpayouts/Aviasales Data API for cached,
+- Flight integration: Travelpayouts/Aviasales Data API for cached,
   date-specific price suggestions. These are historical search results, not
   freshly confirmed fares or seat availability. Missing cached results must not
   be interpreted as no flights operating.
@@ -213,7 +214,7 @@ or add a release requirement to V1.
   selects an option, reconcile sightseeing with arrival and return timing rather
   than assuming a morning arrival. Provide booking links; do not book or pay.
 
-Deferred acceptance checks: supported searches start automatically from complete
+Search acceptance checks: supported searches start automatically from complete
 trip inputs; outward and return dates are respected; recommendations use actual
 results; cached/estimated data is labelled; missing coverage, provider errors,
 and quota exhaustion yield useful fallbacks without paid requests.

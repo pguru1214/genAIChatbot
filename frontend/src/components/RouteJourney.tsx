@@ -215,7 +215,7 @@ export function RouteJourney({ stops, mode, suggested, options, activeDay, onPic
     </div>
     <AnimatePresence mode="wait">
       <motion.div key={mode} className="rj-mode-info" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .25 }}>
-        {option ? <><span>{option.route}</span><span className="rj-facts"><b>{option.duration_estimate}</b><b>{option.cost_estimate}</b></span><em>{option.best_for}</em></>
+        {option ? <><span>{option.route}</span><span className="rj-facts"><b>{option.duration_estimate}</b><b>{option.cost_estimate}</b></span><em>Planning estimate · {option.best_for}</em></>
           : <span>No {modeLabel(mode).toLowerCase()} estimate in this plan yet. Check services and timings before booking.</span>}
       </motion.div>
     </AnimatePresence>

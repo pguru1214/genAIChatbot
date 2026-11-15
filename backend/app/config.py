@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     deployment_access_password: str = ''
     session_signing_key: str = ''
     frontend_dist: str = ''
+    railcore_api_key: str = ''
+    travelpayouts_api_token: str = ''
 
 
 @lru_cache
