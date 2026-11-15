@@ -61,8 +61,11 @@ app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins,
 
 @app.get('/api/health')
 def health():
-    return {'status': 'ok', 'mode': get_settings().app_mode, 'google_execution': False,
-            'authentication': False, 'deployment': 'local-development-only', 'destination_scope': 'India'}
+    settings = get_settings()
+    return {'status': 'ok', 'mode': settings.app_mode, 'google_execution': False,
+            'authentication': 'private-demo-access' if settings.public_deployment else False,
+            'deployment': 'free-personal-demo' if settings.public_deployment else 'local-development-only',
+            'destination_scope': 'India'}
 
 
 class GeocodePlace(BaseModel):
@@ -328,3 +331,8 @@ async def overnight_review(trip_id: str, choice: StopChoice, preferences: Servic
         return stop_review(services, choice)
     except ValueError:
         raise HTTPException(422, 'This stop could not be reverified for the route. Refresh suggestions and choose a returned property.') from None
+
+
+# Register after every API route so the frontend cannot shadow /api endpoints.
+from app.deployment import configure_deployment
+configure_deployment(app)
