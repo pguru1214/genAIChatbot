@@ -1,8 +1,34 @@
 # TripWeave implementation status
 
-Updated: 5 November 2026. This document describes working code; [PRD.md](PRD.md)
+Updated: 15 November 2026. This document describes working code; [PRD.md](PRD.md)
 defines the wider target product. This remains a local, single-user development
 application, without production authentication.
+
+## Daily meals and accommodation
+
+- Every generated day has breakfast 08:00–09:00, lunch 13:00–14:00 and dinner
+  20:00–21:00. Sightseeing is reflowed around meal/access allowances; visits
+  keep their duration and overfull days remain explicit drafts.
+- The **Food & stays** panel displays sourced restaurant and accommodation
+  references, map/website links, reported hours, contact details and listed
+  amenities when available. Food selections and revised previews are page-local.
+- Optional free Geoapify Places/Geocoding/Routing access supports diet, cuisine,
+  listed wheelchair access and accommodation-type filters. No key/demo mode,
+  unknown locations, provider failures and quota limits show truthful fallbacks.
+- Car/taxi with explicit departure times supports outward/inter-base and
+  final-day return road estimates. Travel beyond 22:00 offers route stays with
+  separately checked driving access, estimated arrival and detour. Reviewing a
+  returned property gives a next-day travel alternative and date-impact warning;
+  it does not book, shift dates, or overwrite conversation checkpoints.
+- Meal candidates during road travel require checked access within provisional
+  15-minute allowances each way. Long journeys and transit timing conflicts are
+  flagged rather than replaced with inaccessible destination options.
+- No live room availability, room prices, hotel-quality ratings or transport
+  inventories are verified. Recommendations explain location/amenity matches;
+  arrival/check-in and dietary suitability must be confirmed. Automatic
+  acceptance/replanning of an overnight alternative remains a chat refinement.
+- Shared free API usage is bounded and persisted across restarts, with no paid
+  fallback. External usage of the same provider account is outside the local ledger.
 
 ## India destination scope
 

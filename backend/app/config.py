@@ -9,9 +9,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[1] / '.env', extra='ignore')
     app_mode: Literal['demo', 'live'] = 'demo'
     gemini_api_key: str = ''
+    gemini_fallback_api_key: str = ''
     gemini_model: str = ''
     gemini_fallback_model: str = ''
     geoapify_api_key: str = ''
+    geoapify_daily_credit_limit: int = 2400
     database_url: str = 'sqlite:///./tripweave.db'
     cors_origins: list[str] = ['http://localhost:5173', 'http://127.0.0.1:5173']
 

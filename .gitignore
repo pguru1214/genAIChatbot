@@ -12,3 +12,4 @@ dist/
 *.tsbuildinfo
 *.log
 .DS_Store
+backend/.cache/

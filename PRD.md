@@ -177,6 +177,129 @@ have a moderate budget, and want a packing checklist.”
 - Preserve itinerary revisions when saved plans change.
 - Treat budget guidance as approximate; verified booking totals are outside V1.
 
+#### Deferred enhancement: automatic free-only transport suggestions
+
+Status: agreed on 15 November 2026 for a personal demo; implementation is deferred.
+This does not change the current estimate-and-verification-link behavior above
+or add a release requirement to V1.
+
+- Once origin, destination, journey dates, and passenger count are known,
+  automatically search supported providers for outward and return journeys.
+  Compare buses, trains, and flights where sensible, and recommend the cheapest,
+  fastest, and best-fit options among the results actually received.
+- Train candidate: evaluate RailCore's free personal/evaluation tier, currently
+  advertised as 2,000 requests per month. Verify date-specific journey search,
+  fares, availability, accuracy, and coverage before integration.
+  Reference: https://railcore.tech/pricing
+- Flight candidate: evaluate Travelpayouts/Aviasales Data API for cached,
+  date-specific price suggestions. These are historical search results, not
+  freshly confirmed fares or seat availability. Missing cached results must not
+  be interpreted as no flights operating.
+  Reference: https://support.travelpayouts.com/hc/en-us/articles/203956163-Aviasales-Data-API
+- Bus fallback: suggest relevant routes, estimated durations, and booking-site
+  search links. No dependable permanently free live Indian bus inventory API
+  has been verified; do not claim live bus fares, schedules, or available seats.
+- Use only free plans suitable for personal demos. Require no payment method,
+  paid fallback, automatic paid upgrade, or expiring paid trial. Recheck current
+  provider terms, quotas, and permitted use before implementation; candidates
+  are not guaranteed integrations.
+- Keep credentials in the backend environment. Enforce request quotas, use
+  bounded retries and permitted caching, and stop calls when the free allowance
+  is exhausted. Preserve useful partial results and verification links.
+- Show provider, retrieval time, departure/arrival times, duration, fare/currency,
+  and availability only where returned. Clearly distinguish live results,
+  cached prices, and estimates. Never invent service numbers or direct routes.
+- Account for station/airport transfers and overnight journeys. After a traveller
+  selects an option, reconcile sightseeing with arrival and return timing rather
+  than assuming a morning arrival. Provide booking links; do not book or pay.
+
+Deferred acceptance checks: supported searches start automatically from complete
+trip inputs; outward and return dates are respected; recommendations use actual
+results; cached/estimated data is labelled; missing coverage, provider errors,
+and quota exhaustion yield useful fallbacks without paid requests.
+
+#### Daily meals and route/destination accommodation
+
+Status: implemented for the personal demo on 15 November 2026 using free-tier
+Geoapify place and road lookups, with explicit missing-data fallbacks. Live
+bus/train/flight inventory remains deferred. Cover every itinerary day, including arrival,
+departure, intercity travel, and destination sightseeing days.
+
+- Reserve breakfast within 08:00–09:00, lunch within 13:00–14:00, and dinner
+  within 20:00–21:00, using the local time at the planned stop. These are meal
+  windows, not a requirement to spend the entire hour eating. Display meals
+  outside the default 10:00–18:00 sightseeing window without extending
+  sightseeing hours or silently changing the user's dates.
+- Automatically suggest up to three relevant restaurants/cafes for each meal,
+  near the traveller's expected location at that time: accommodation, an
+  attraction, a station, or a feasible stop along the chosen road route.
+  Respect budget, cuisine, dietary preferences, and accessibility needs when
+  known. Never infer vegetarian/vegan or allergen suitability without evidence.
+- Schedule travel, meals, and visits together. Account for stop duration,
+  access, and detours; prevent overlapping activities. If an early departure,
+  late arrival, or uninterrupted journey prevents a requested meal window,
+  explain the conflict and offer a feasible alternative rather than fabricate
+  a stop. For trains and scheduled buses, suggest options near accessible
+  boarding/arrival points or evidenced scheduled stops; do not assume passengers
+  can leave the service or choose arbitrary roadside stops.
+- If planned travel continues beyond 22:00 local time, automatically offer
+  overnight accommodation on the specific chosen route near the traveller's
+  expected position around 22:00. For road travel, prefer reachable towns and
+  stops before the cutoff and account for actual road access and detour time.
+  Do not suggest properties merely because they lie between the endpoints.
+- Show up to three suitable en-route stays with their location, relation to the
+  route, estimated arrival, property type, and source/map/website links where
+  available. Ask the traveller to choose before splitting the journey, adding
+  an overnight stay, changing dates, or moving the next day's activities.
+  For an overnight train/bus journey, do not silently replace the booked or
+  selected service with a hotel stop; explain the alternative and any required
+  journey change. If no suitable property is found, report this explicitly.
+- Also suggest up to three well-matched destination accommodations for each
+  overnight base, including multi-city trips. Prefer convenient locations for
+  the itinerary, suitable amenities, the traveller's budget, and positively
+  evidenced quality. Explain why each property is recommended.
+- The request for "very good" accommodation is a quality preference, not
+  permission to invent ratings. Display ratings, review counts, stars,
+  amenities, or price bands only when supported by source data. Explain when
+  free sources cannot establish quality; present location/amenity-based matches
+  as such rather than claim they are top-rated, safe, or personally verified.
+- Use Geoapify Routing and Places free tiers as initial candidates for route
+  geometry, restaurants, and accommodation. Evaluate OpenStreetMap/Overpass only
+  for bounded occasional fallback queries under public-instance policies.
+  Verify coverage, terms, and current quotas at implementation time. Preserve
+  source attribution, keep keys on the backend, cache only as permitted, and
+  enforce free quotas with no paid fallback or payment-required trial.
+  References: https://apidocs.geoapify.com/docs/places and
+  https://apidocs.geoapify.com/docs/routing/routing/ and
+  https://www.geoapify.com/pricing/ and
+  https://dev.overpass-api.de/overpass-doc/en/preface/commons.html
+- Show source and retrieval time. Opening hours are reported provider data,
+  not a guarantee the venue will open on the travel date. Clearly mark unknown
+  hours, unavailable contact details, and incomplete local coverage. Distinguish
+  distance from the route from road detour distance/time; label travel estimates.
+- Hotel suggestions are references, not confirmed reservations. Do not claim
+  date-specific room availability, nightly prices, restaurant booking slots,
+  or late check-in unless explicitly supported. For a late arrival, flag that
+  check-in must be confirmed with the property. Provide verification links;
+  never book or pay automatically.
+
+Deferred acceptance checks:
+
+1. Every day includes breakfast, lunch, and dinner in the specified windows,
+   with sourced suggestions or an explicit conflict/coverage explanation for
+   each missing recommendation.
+2. Meal suggestions follow the expected location and selected transport mode;
+   scheduling includes stops and detours without overlap.
+3. Travel beyond 22:00 triggers relevant en-route accommodation alternatives;
+   travel ending at or before 22:00 does not trigger this rule by itself.
+4. Each overnight destination base receives accommodation recommendations or
+   an explicit lack-of-data explanation, including when travel ends before 22:00.
+5. Selecting an overnight stop produces a reviewed, consistent onward schedule;
+   the app never silently changes dates, duration, or transport commitments.
+6. Unknown hours, quality, prices, availability, late check-in, provider failures,
+   and exhausted quotas are represented truthfully; all provider calls remain
+   within free-only operating constraints.
+
 ### 4.7 Packing and preparation
 
 - Suggest items based on destination, duration, activities, and available weather.

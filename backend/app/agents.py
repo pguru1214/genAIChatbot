@@ -15,6 +15,7 @@ from app.planning import planning_defaults, clock_minutes
 from app.itinerary import connectivity_context, schedule_schema, render_schedule, demo_schedule, proposal_schema, prepare_schedule
 from app.errors import ModelResponseError
 from app.weather import itinerary_weather
+from app.food_stays import reserve_meals, build_services, append_service_text
 
 
 class AgentOutput(BaseModel):
@@ -34,6 +35,7 @@ class State(TypedDict, total=False):
     schedule: list[dict]
     structured_plan: dict
     planning_status: str
+    food_stays: dict
 
 
 class TourismSelection(BaseModel):
@@ -157,6 +159,10 @@ async def itinerary(state: State) -> dict:
                 'Set each day base to one specific Indian town name, not a state, district, hotel or combined route. '
                 'Daily weather is attached by the backend after selecting these towns. Do not invent forecasts '
                 'or claim that the backend cannot retrieve weather for regional itineraries. '
+                'Restaurants and accommodation are also attached by the backend. Do not invent named venues, '
+                'hotel ratings or room availability. Include a generic lunch allowance; the backend reserves '
+                'breakfast 08:00–09:00, lunch 13:00–14:00 and dinner 20:00–21:00, '
+                'with 15-minute local access allowances on each side of meals. '
                 'For district requests stay within that district. Use supplied evidence for named attractions, '
                 'opening information and facts; dated catalog references are not live verification. Missing '
                 'forecasts do not invalidate retrieved places. Report relevant research limitations in notes. '
@@ -171,6 +177,9 @@ async def itinerary(state: State) -> dict:
         ], request, state['research'])
     weather = await itinerary_weather(plan, request, state['research']) if get_settings().app_mode == 'live' else None
     result = render_schedule(plan, request, state['connectivity'], weather)
+    reserve_meals(result, request)
+    services = await build_services({**result, 'research': state['research']}, request)
+    append_service_text(result, services)
     return {**result, 'agent_trace': [*state['agent_trace'], 'Itinerary Agent']}
 
 

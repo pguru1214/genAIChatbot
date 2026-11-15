@@ -19,6 +19,9 @@ TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 
 
 async def fetch(url: str, params: dict):
+    if url.startswith('https://api.geoapify.com/'):
+        from app.geoapify import geoapify_fetch
+        return await geoapify_fetch(url, params)
     # Only callers in this module choose URLs. Never accept a model-supplied URL.
     async with httpx.AsyncClient(timeout=12, headers=HEADERS, follow_redirects=False) as client:
         for attempt in range(2):

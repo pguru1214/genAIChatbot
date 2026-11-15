@@ -204,6 +204,10 @@ def test_five_day_state_conversation_saves_partial_travel_review_without_error(m
         if schema is agents.TourismSelection:
             return schema(district_ids=['kerala-ernakulam', 'kerala-alappuzha'])
         payload = itinerary_payload(5, ['catalog-kerala-ernakulam'])
+        # Keep the ordinary days feasible with the fixed 13:00 lunch and
+        # restaurant-access allowances, so only the travel day needs review.
+        for day in payload['days'][1:]:
+            next(a for a in day['activities'] if a['title'] == 'Third attraction')['duration_minutes'] = 80
         payload['days'][0]['activities'] = [{'kind': 'transfer', 'title': 'Long intercity journey',
             'duration_minutes': 840, 'description': 'Transport timing must be checked.'}]
         return schema.model_validate(payload)

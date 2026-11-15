@@ -198,6 +198,41 @@ Reply with city, region, and country separated by commas (for example,
 The quick planner may still reject ambiguous requests. Requests outside the forecast
 window are labelled unavailable. Provider outages can yield partial results.
 
+### Daily food and accommodation suggestions
+
+Every new itinerary includes breakfast **08:00–09:00**, lunch **13:00–14:00**,
+and dinner **20:00–21:00** for every day. The backend reserves these windows
+and provisional restaurant-access time without shortening visits. Days that
+cannot fit remain drafts with unscheduled activities.
+
+Open **Food & stays** in the trip panel for restaurant choices and destination
+accommodation. Live place references need a free Geoapify account (no credit
+card required); add `GEOAPIFY_API_KEY` to `backend/.env` and restart the backend.
+Keep the provider account on its Free plan. Without a key, or in demo mode,
+meal windows and map-search links still work; venue names are not fabricated.
+
+Choose **Car / taxi** and a road departure time in that tab, then select
+**Update suggestions**, to calculate road estimates between daily bases.
+Add a separate final-day return departure to check the route home. If travel
+extends beyond **22:00**, reachable route accommodation is suggested where
+data permits. **Review overnight alternative** shows estimated check-in,
+next-day onward timing, detour and trip-date impact without changing the plan
+or booking a room. Revise affected days in chat before following an alternative.
+Food choices and updated previews apply to the current page session.
+
+Dietary, cuisine, listed wheelchair access and accommodation-type filters are
+available. Venue quality, prices, future opening hours, late check-in and room
+availability are not guaranteed; confirm with the property. Train/bus/flight
+journeys do not assume accessible roadside stops or live timetables.
+
+Geoapify requests share a persisted, conservative local allowance, defaulting
+to `GEOAPIFY_DAILY_CREDIT_LIMIT=2400` credits per rolling 24 hours. Requests also
+have rate, per-plan count and time limits. There are no paid fallbacks; quotas
+yield useful partial results. Use a dedicated key/account if other applications
+also consume the provider's allowance. Runtime quota records live in the ignored
+`backend/.cache/` directory. Sources: [Geoapify free plan](https://www.geoapify.com/pricing/)
+and [Places API](https://apidocs.geoapify.com/docs/places).
+
 ## Agent architecture
 
 ### Guided trip conversations
@@ -213,7 +248,12 @@ preferences** fills only missing optional preferences and starts generation.
 The backend keeps the selected `GEMINI_MODEL` as primary. Set the optional
 `GEMINI_FALLBACK_MODEL` to an account-supported model to use it after temporary
 5xx failures. The primary gets one bounded retry; the fallback gets one attempt.
-Authentication failures and exhausted quotas do not trigger model switching.
+Optionally set `GEMINI_FALLBACK_API_KEY` in `backend/.env` to use a separate
+credential on the final fallback attempt. It uses `GEMINI_FALLBACK_MODEL` when
+configured, otherwise the primary model. Short calls retry the primary once;
+long itinerary calls use at most two attempts, including the fallback. Keys
+stay on the backend. Restart after changing credentials. Authentication failures
+and exhausted quotas do not trigger model or key switching.
 Wrapped Gemini 503 errors are reported as temporary service overload rather than
 an invalid date or an unknown workflow failure. Provider outages can still occur;
 no application can guarantee model availability. Secrets stay in `backend/.env`.

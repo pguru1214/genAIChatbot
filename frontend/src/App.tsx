@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { readEvents } from './lib/sse'
 import { Backdrop } from './components/ui'
@@ -8,6 +8,7 @@ import { TripPanel } from './components/TripPanel'
 import { QuickPlanModal } from './components/QuickPlanModal'
 import { useToast } from './components/Toasts'
 import { useConversation } from './hooks/useConversation'
+import { celebrate } from './lib/celebrate'
 import type { Plan, Trip } from './types'
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 1100
@@ -16,10 +17,12 @@ export function App() {
   const toast = useToast()
   const [mode, setMode] = useState('connecting')
   const [trips, setTrips] = useState<Trip[]>([])
+  const sessionTripIds = useRef(new Set<string>())
   async function refresh() {
     const response = await fetch('/api/trips')
     if (!response.ok) throw new Error('Could not load saved trips')
-    setTrips(await response.json())
+    const saved: Trip[] = await response.json()
+    setTrips(saved.filter(trip => sessionTripIds.current.has(trip.id)))
   }
   useEffect(() => {
     fetch('/api/health').then(r => { if (!r.ok) throw new Error(); return r.json() }).then(d => setMode(d.mode))
@@ -27,7 +30,7 @@ export function App() {
     refresh().catch(() => {})
   }, [])
 
-  const conv = useConversation({ mode, onSaved: () => { void refresh().catch(() => {}) } })
+  const conv = useConversation({ mode, onSaved: tripId => { if (tripId) { if (!sessionTripIds.current.has(tripId)) celebrate(tripId); sessionTripIds.current.add(tripId) } void refresh().catch(() => {}) } })
 
   // Layout state.
   const [sidebarOpen, setSidebarOpen] = useState(() => !narrow())
@@ -82,7 +85,7 @@ export function App() {
       await readEvents(response, (event, data) => {
         if (event === 'progress') setPinned(p => p && { ...p, status: data.message })
         if (event === 'answer_delta') setPinned(p => p && { ...p, answer: p.answer + data.text })
-        if (event === 'completed') { completed = true; setPinned(p => p && { ...p, result: data.result, details: data.result.request, streaming: false }) }
+        if (event === 'completed') { completed = true; sessionTripIds.current.add(data.result.trip_id); if (!data.result.action) celebrate(data.result.trip_id); setPinned(p => p && { ...p, result: data.result, details: data.result.request, streaming: false }) }
         if (event === 'error') throw new Error(data.message)
       })
       if (!completed) throw new Error('Connection ended before completion. Check saved trips before retrying.')
@@ -94,7 +97,7 @@ export function App() {
     } finally { setQuickBusy(false) }
   }
 
-  return <div className="app" data-sidebar={sidebarOpen ? 'open' : 'closed'} data-panel={panelOpen ? 'open' : 'closed'} data-view={mobileView}>
+  return <div className="app" data-sidebar={sidebarOpen ? 'open' : 'closed'} data-panel={panelOpen ? 'open' : 'closed'} data-view={mobileView} data-plan={plan ? 'ready' : 'none'}>
     <Backdrop />
     <AnimatePresence initial={false}>
       {sidebarOpen && <motion.div key="sidebar" className="sidebar-wrap" initial={{ x: -280, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -280, opacity: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 34 }}>
@@ -127,7 +130,7 @@ export function App() {
         onTogglePanel={() => setPanelOpen(v => !v)} onShowPlan={showPlan} onQuickPlan={() => setQuickOpen(true)} />
       <AnimatePresence initial={false}>
         {panelOpen && <motion.div key="panel" className="panel-wrap" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} transition={{ type: 'spring', stiffness: 280, damping: 32 }}>
-          <TripPanel plan={plan} conv={conv} actionBusy={quickBusy} onAction={intent => void run(intent)} onClose={() => { setPanelOpen(false); setMobileView('chat') }} />
+          <TripPanel plan={plan} conv={conv} actionBusy={quickBusy} onAction={intent => void run(intent)} onUpdate={result => { if (plan) setPinned({ ...plan, result, answer: result.answer }) }} onClose={() => { setPanelOpen(false); setMobileView('chat') }} />
         </motion.div>}
       </AnimatePresence>
     </div>

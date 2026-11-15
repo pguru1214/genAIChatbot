@@ -1,4 +1,4 @@
-"""Bounded retries and an explicitly configured Gemini fallback model."""
+"""Bounded retries with an explicitly configured Gemini fallback model/key."""
 import asyncio
 import time
 import json
@@ -14,25 +14,25 @@ from app.errors import ModelResponseError, provider_status
 
 def model_attempts():
     settings = get_settings()
-    models = [settings.gemini_model]
-    if settings.gemini_fallback_model and settings.gemini_fallback_model not in models:
-        models.append(settings.gemini_fallback_model)
-    # Primary: one retry. Optional fallback: one attempt. No quota/auth bypass.
-    return [models[0], *models]
+    primary = (settings.gemini_model, settings.gemini_api_key)
+    fallback = (settings.gemini_fallback_model or settings.gemini_model,
+                settings.gemini_fallback_api_key or settings.gemini_api_key)
+    # Primary: one retry. Optional fallback: one attempt. No quota bypass.
+    return [primary, primary, *([fallback] if fallback != primary else [])]
 
 
 def transient(error):
     return provider_status(error) in {408, 500, 502, 503, 504} or isinstance(error, (TimeoutError, httpx.TimeoutException, ModelResponseError))
 
 
-def structured_model(model_name, schema, max_tokens):
+def structured_model(model_name, schema, max_tokens, *, api_key=None):
     wire_schema = schema
     if max_tokens > 4000:
         # Nested bounded arrays can make Gemini's constrained decoder reject a
         # valid JSON schema with HTTP 400. Keep the wire shape simple; the full
         # Pydantic schema and request-specific rules still validate every result.
         wire_schema = provider_schema(schema.model_json_schema(), getattr(schema, 'allowed_source_ids', None))
-    return ChatGoogleGenerativeAI(model=model_name, api_key=get_settings().gemini_api_key,
+    return ChatGoogleGenerativeAI(model=model_name, api_key=api_key if api_key is not None else get_settings().gemini_api_key,
         timeout=60 if max_tokens >= 12000 else 35 if max_tokens > 4000 else 18,
         max_retries=0, max_output_tokens=max_tokens).with_structured_output(wire_schema)
 
@@ -63,9 +63,9 @@ def checked_response(response, schema):
 
 def invoke_structured(schema, messages, max_tokens=2500):
     attempts = model_attempts()
-    for index, name in enumerate(attempts):
+    for index, (name, key) in enumerate(attempts):
         try:
-            return checked_response(structured_model(name, schema, max_tokens).invoke(messages), schema)
+            return checked_response(structured_model(name, schema, max_tokens, api_key=key).invoke(messages), schema)
         except Exception as error:
             if index == len(attempts) - 1 or not transient(error):
                 raise
@@ -79,9 +79,9 @@ async def ainvoke_structured(schema, messages, max_tokens=2500):
         # Long itineraries get time to finish, with at most two requests total.
         distinct = list(dict.fromkeys(attempts))
         attempts = distinct if len(distinct) > 1 else attempts[:2]
-    for index, name in enumerate(attempts):
+    for index, (name, key) in enumerate(attempts):
         try:
-            return checked_response(await structured_model(name, schema, max_tokens).ainvoke(messages), schema)
+            return checked_response(await structured_model(name, schema, max_tokens, api_key=key).ainvoke(messages), schema)
         except Exception as error:
             if index == len(attempts) - 1 or not transient(error):
                 raise

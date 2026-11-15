@@ -9,6 +9,7 @@ _directory = tempfile.TemporaryDirectory(prefix='tripweave-tests-')
 os.environ['DATABASE_URL'] = 'sqlite:///' + str(Path(_directory.name) / 'tests.db')
 os.environ['APP_MODE'] = 'demo'
 os.environ['GEOAPIFY_API_KEY'] = ''
+os.environ['GEMINI_FALLBACK_API_KEY'] = ''
 
 
 @pytest.fixture(scope='session', autouse=True)

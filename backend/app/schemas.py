@@ -2,11 +2,12 @@ from datetime import date
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from app.planning import clock_minutes
+from app.food_stays import ServicePreferences
 
 
-class ChatRequest(BaseModel):
+class ChatRequest(ServicePreferences):
     message: str = Field(min_length=1, max_length=4000)
     destination: str = Field(min_length=1, max_length=200)
     origin: str | None = Field(default=None, min_length=1, max_length=200)

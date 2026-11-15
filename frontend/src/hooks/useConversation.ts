@@ -6,7 +6,7 @@ import type { Conversation, ConversationSummary, Details } from '../types'
 const storageKey = 'tripweave-conversation'
 
 /** Guided conversation state: history, the active conversation, and streaming turns. */
-export function useConversation({ mode, onSaved }: { mode: string; onSaved: () => void }) {
+export function useConversation({ mode, onSaved }: { mode: string; onSaved: (tripId?: string) => void }) {
   const [view, setView] = useState<Conversation | null>(null)
   const [list, setList] = useState<ConversationSummary[]>([])
   const [message, setMessage] = useState('')
@@ -15,6 +15,7 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
   const [status, setStatus] = useState('Loading your conversation…')
   const [failed, setFailed] = useState(false)
   const sending = useRef(false)
+  const sessionIds = useRef(new Set<string>())
   // The traveller's message, shown immediately until the server echoes the conversation back.
   const [outgoing, setOutgoing] = useState('')
   const toast = useToast()
@@ -22,13 +23,14 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
 
   function apply(data: Conversation) {
     setView(data); setDetails(data.details)
-    try { localStorage.setItem(storageKey, data.id) } catch { /* Server history remains available. */ }
+    sessionIds.current.add(data.id)
   }
   async function refreshList() {
     const response = await fetch('/api/conversations')
     if (!response.ok) throw new Error('Could not load conversations. Check that the backend is running.')
     const data: ConversationSummary[] = await response.json()
-    setList(data); return data
+    const current = data.filter(item => sessionIds.current.has(item.id))
+    setList(current); return current
   }
   async function open(id: string) {
     const response = await fetch(`/api/conversations/${id}`)
@@ -37,18 +39,9 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
     apply(data); return data
   }
   useEffect(() => {
-    let active = true
-    void (async () => {
-      try {
-        const conversations = await refreshList()
-        let saved: string | null = null
-        try { saved = localStorage.getItem(storageKey) } catch { /* Optional convenience. */ }
-        const restored = active && saved && conversations.some(c => c.id === saved) ? await open(saved) : null
-        if (active) setStatus(restored?.pending ? 'Your trip is waiting for clarification. Answer the question below.' : 'Tell me about your trip, or continue where you left off.')
-      } catch (error) { if (active) { setFailed(true); setStatus(String(error)) } }
-      finally { if (active) setBusy(false) }
-    })()
-    return () => { active = false }
+    try { localStorage.removeItem(storageKey) } catch { /* Storage is optional. */ }
+    setStatus('Ready for a new journey.')
+    setBusy(false)
   }, [])
 
   const hasEdits = Object.entries(details).some(([key, value]) => value !== '' && value !== view?.details[key])
@@ -81,12 +74,12 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
       let complete = false
       await readEvents(response, (event, data) => {
         if (event === 'progress') setStatus(data.message)
-        if (event === 'conversation') { apply(data.conversation); setOutgoing('') }
+        if (event === 'conversation') { apply(data.conversation); if (data.conversation.result?.trip_id) onSaved(data.conversation.result.trip_id); setOutgoing('') }
         if (event === 'completed') complete = true
         if (event === 'error') throw new Error(data.message)
       })
       if (!complete) throw new Error('Connection interrupted. Reopen to check your saved progress.')
-      setMessage(''); setStatus('Progress saved. You can continue after refreshing.')
+      setMessage(''); setStatus('This chat clears when you refresh or close the page.')
       await refreshList(); onSaved()
     } catch (error) {
       setFailed(true); setStatus(error instanceof TypeError && /fetch|network|load failed/i.test(error.message)
@@ -101,7 +94,7 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: () =
             setFailed(false); setStatus('Your progress was restored. Please answer the clarification question.')
           } else if (restored.result && !restored.recoverable && restored.checkpoint_id !== current.checkpoint_id) {
             setFailed(false); setStatus('Your completed plan was restored from the saved conversation.')
-            onSaved()
+            onSaved(restored.result.trip_id)
           }
           await refreshList()
         } catch { /* Keep the actionable error when restoration is unavailable. */ }

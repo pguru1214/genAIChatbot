@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { ArrowUp, ChevronDown, Compass, Landmark, Map as MapIcon, Menu, Mountain, PanelRightClose, PanelRightOpen, RotateCcw, Sparkles, UserRound, UtensilsCrossed } from 'lucide-react'
 import type { ConversationState } from '../hooks/useConversation'
 import { RichText } from './RichText'
+import { RouteArt } from './RouteArt'
 import { Notice, ease } from './ui'
 
 const suggestions = [
@@ -52,13 +53,17 @@ export function ChatView({ conv, mode, sidebarOpen, panelOpen, onMenu, onToggleP
         {empty ? <Welcome busy={busy} onPick={prompt => { conv.setMessage(prompt); inputRef.current?.focus() }} onQuickPlan={onQuickPlan} /> : <>
           <AnimatePresence initial={false}>
             {view?.messages.map((entry, index) => entry.role === 'assistant' && entry.content === planAnswer
-              ? <PlanReady key={index} text={entry.content} needsReview={view?.result?.planning_status === 'needs_review'} onOpen={onShowPlan} />
+              ? <PlanReady key={index} text={entry.content} needsReview={view?.result?.planning_status === 'needs_review'} onOpen={onShowPlan}
+                origin={String(view?.details.origin ?? '')} destination={String(view?.details.destination ?? '')} days={Number(view?.details.days) || 0} />
               : <Message key={index} role={entry.role} content={entry.content} />)}
             {outgoing && <Message key={view?.messages.length ?? 0} role="user" content={outgoing} />}
-            {busy && <motion.div key="typing" className="msg assistant" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {busy && <motion.div key="typing" className="msg assistant" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }}>
               <span className="avatar guide"><Compass size={15} /></span>
-              <div className="typing"><span className="dots"><span /><span /><span /></span>
-                <AnimatePresence mode="wait"><motion.em key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>{status}</motion.em></AnimatePresence></div>
+              <div className="thinking">
+                <RouteArt status={status} />
+                <div className="typing"><span className="dots"><span /><span /><span /></span>
+                  <AnimatePresence mode="wait"><motion.em key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>{status}</motion.em></AnimatePresence></div>
+              </div>
             </motion.div>}
           </AnimatePresence>
         </>}
@@ -127,14 +132,30 @@ function Message({ role, content }: { role: string; content: string }) {
 }
 
 /** The finished itinerary lives in the trip panel; the chat shows a compact card pointing to it. */
-function PlanReady({ text, onOpen, needsReview }: { text: string; onOpen: () => void; needsReview?: boolean }) {
-  const preview = text.replace(/\s+/g, ' ').slice(0, 180)
+function PlanReady({ text, onOpen, needsReview, origin, destination, days }: { text: string; onOpen: () => void; needsReview?: boolean; origin: string; destination: string; days: number }) {
+  const overview = text.replace(/^Draft itinerary[^\n]*\n+/, '').split('\n')[0].slice(0, 200)
+  const place = (s: string) => s.split(',')[0].trim()
   return <motion.div className="msg assistant" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .4, ease }}>
     <span className="avatar guide"><Compass size={15} /></span>
-    <div className="plan-ready">
-      <span className="plan-ready-icon"><MapIcon size={20} /></span>
-      <div><strong>{needsReview ? 'Your draft is ready — review flagged travel days' : 'Your itinerary is ready'}</strong><p>{preview}{text.length > 180 && '…'}</p></div>
-      <motion.button type="button" className="primary small" onClick={onOpen} whileHover={{ scale: 1.03 }} whileTap={{ scale: .97 }}>Open itinerary</motion.button>
-    </div>
+    <motion.div className="plan-ready" whileHover={{ y: -2 }}>
+      <div className="plan-ribbon" aria-hidden>
+        <svg viewBox="0 0 300 60" preserveAspectRatio="xMidYMid meet">
+          <motion.path d="M14 44 C 80 4, 150 4, 186 30 S 260 56, 286 16" fill="none" stroke="url(#ribbonGrad)" strokeWidth="2.4" strokeDasharray="2 7" strokeLinecap="round"
+            initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.6, ease: 'easeInOut' }} />
+          <defs><linearGradient id="ribbonGrad" x1="0" x2="1"><stop offset="0" stopColor="#2a7f7f" /><stop offset="1" stopColor="#d2603a" /></linearGradient></defs>
+          <path id="ribbonPath" d="M14 44 C 80 4, 150 4, 186 30 S 260 56, 286 16" fill="none" />
+          <circle cx="14" cy="44" r="4.5" fill="#2a7f7f" stroke="#fff" strokeWidth="2" /><circle cx="286" cy="16" r="4.5" fill="#d2603a" stroke="#fff" strokeWidth="2" />
+          <g><path d="M-9 0 L7 -1.2 Q10 0 7 1.2 Z M-1.5 0 L-5 -6.5 L-2 -6.5 L4 0 L-2 6.5 L-5 6.5 Z" fill="#14363b" />
+            <animateMotion dur="5s" repeatCount="indefinite" rotate="auto" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines=".45 0 .55 1"><mpath href="#ribbonPath" /></animateMotion></g>
+        </svg>
+        <span className="ribbon-from">{place(origin) || 'Start'}</span><span className="ribbon-to">{place(destination) || 'Destination'}</span>
+      </div>
+      <div className="plan-ready-body">
+        <span className="plan-ready-icon"><MapIcon size={20} /></span>
+        <div><strong>{needsReview ? 'Your draft journey is ready' : 'Your journey is ready'}{days > 0 && <em> · {days} {days === 1 ? 'day' : 'days'}</em>}</strong>
+          <p>{needsReview ? 'A few travel days are flagged for review. ' : ''}{overview}</p></div>
+        <motion.button type="button" className="primary small" onClick={onOpen} whileHover={{ scale: 1.04 }} whileTap={{ scale: .96 }}>Open journey</motion.button>
+      </div>
+    </motion.div>
   </motion.div>
 }

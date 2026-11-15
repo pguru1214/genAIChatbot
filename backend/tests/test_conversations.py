@@ -317,7 +317,7 @@ def test_date_reply_and_location_choice_complete_live_graph_during_primary_outag
         pass
 
     monkeypatch.setattr(llm.asyncio, 'sleep', no_wait)
-    monkeypatch.setattr(llm, 'structured_model', lambda name, schema, *args: Model(name, schema))
+    monkeypatch.setattr(llm, 'structured_model', lambda name, schema, *args, **kwargs: Model(name, schema))
     with TestClient(app) as client:
         cid = create(client)
         view = turn(client, cid, '2027-11-02', {'destination': 'Jaipur', 'days': 3})

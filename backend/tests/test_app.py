@@ -180,3 +180,32 @@ def test_provider_error_details_are_not_exposed():
     assert error['code'] == 'provider_quota'
     assert 'secret-value' not in json.dumps(error)
     assert 'secret-value' not in json.dumps(public_error(RuntimeError('api_key=secret-value')))
+
+
+def test_geocode_demo_returns_unresolved_points():
+    with TestClient(app) as client:
+        response = client.post('/api/geocode', json={'places': [{'name': 'Kurnool'}, {'name': 'Panaji', 'region': 'Goa, India', 'near': [15.49, 73.83]}]})
+        assert response.status_code == 200
+        assert response.json() == {'points': [None, None]}
+        assert client.post('/api/geocode', json={'places': []}).status_code == 422
+
+
+def test_geocode_query_cleanup():
+    from app.geocode import _queries
+    assert _queries('North Goa (Calangute)')[:2] == ['North Goa', 'Calangute']
+    assert _queries('Along Kurnool to Panaji')[:2] == ['Panjim', 'Panaji']
+
+
+def test_geocode_prefers_region_and_anchor(monkeypatch):
+    import asyncio
+    from app import geocode
+    results = [{'name': 'Panāji Muwara', 'admin1': 'Gujarat', 'country_code': 'IN', 'latitude': 23.0, 'longitude': 73.2},
+               {'name': 'Panjim', 'admin1': 'Goa', 'country_code': 'IN', 'latitude': 15.49, 'longitude': 73.83}]
+
+    async def fake_fetch(url, params):
+        return {'results': results}
+    monkeypatch.setattr(geocode, 'fetch', fake_fetch)
+    assert asyncio.run(geocode._lookup('Panaji', 'Goa, India', None))['admin1'] == 'Goa'
+    assert asyncio.run(geocode._lookup('Panaji', '', (15.5, 73.8)))['admin1'] == 'Goa'
+    results.pop()  # Only the wrong-state match remains: return nothing rather than a wrong point.
+    assert asyncio.run(geocode._lookup('Panaji', 'Goa, India', (15.5, 73.8))) is None

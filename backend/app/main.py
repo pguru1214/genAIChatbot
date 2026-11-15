@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 from contextlib import ExitStack, asynccontextmanager
@@ -20,6 +21,11 @@ from app.conversations import TurnRequest, build_conversation_graph, snapshot
 from app.schemas import ChatRequest
 from app.errors import public_error
 from app.tourism import directory
+from app.food_stays import ServicePreferences, StopChoice, build_services, reserve_meals, append_service_text, stop_review
+from app.itinerary import DetailedItinerary, render_schedule
+from app.planning import planning_defaults
+from app.geocode import geocode_points
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +62,22 @@ app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins,
 def health():
     return {'status': 'ok', 'mode': get_settings().app_mode, 'google_execution': False,
             'authentication': False, 'deployment': 'local-development-only', 'destination_scope': 'India'}
+
+
+class GeocodePlace(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    region: str = Field(default='', max_length=200)
+    near: tuple[float, float] | None = None
+
+
+class GeocodeRequest(BaseModel):
+    places: list[GeocodePlace] = Field(min_length=1, max_length=10)
+
+
+@app.post('/api/geocode')
+async def geocode(body: GeocodeRequest):
+    """Coordinates for drawing the route only; unresolved places come back as null."""
+    return {'points': await geocode_points([p.model_dump() for p in body.places])}
 
 
 @app.get('/api/tourism/directory')
@@ -233,3 +255,37 @@ def approve(proposal_id: str, db: Session = Depends(get_db)):
     if not db.get(Proposal, proposal_id):
         raise HTTPException(404, 'Proposal not found')
     raise HTTPException(501, 'Google OAuth and live action execution are not implemented. Preview only; nothing was sent or created.')
+
+
+@app.post('/api/trips/{trip_id}/food-stays')
+async def food_stays_preview(trip_id: str, preferences: ServicePreferences, db: Session = Depends(get_db)):
+    trip = db.get(Trip, trip_id)
+    if not trip:
+        raise HTTPException(404, 'Trip not found')
+    if not trip.result.get('structured_plan'):
+        raise HTTPException(422, 'This older plan has no daily schedule. Generate a new itinerary first.')
+    request, _ = planning_defaults({**trip.request, **preferences.model_dump()})
+    plan = DetailedItinerary.model_validate(trip.result['structured_plan'])
+    weather = {d['day']: d['weather'] for d in trip.result.get('schedule', []) if d.get('weather')}
+    result = {**trip.result, **render_schedule(plan, request, trip.result.get('connectivity', {}), weather), 'request': request}
+    reserve_meals(result, request)
+    services = await build_services(result, request, preferences)
+    append_service_text(result, services)
+    result['trip_id'] = trip_id
+    # A reviewed local preview does not overwrite a conversation checkpoint or
+    # silently change saved trip dates. The browser keeps it for this page only.
+    return result
+
+
+@app.post('/api/trips/{trip_id}/overnight-review')
+async def overnight_review(trip_id: str, choice: StopChoice, preferences: ServicePreferences,
+                           db: Session = Depends(get_db)):
+    trip = db.get(Trip, trip_id)
+    if not trip:
+        raise HTTPException(404, 'Trip not found')
+    try:
+        request, _ = planning_defaults({**trip.request, **preferences.model_dump()})
+        services = await build_services(copy.deepcopy(trip.result), request, preferences)
+        return stop_review(services, choice)
+    except ValueError:
+        raise HTTPException(422, 'This stop could not be reverified for the route. Refresh suggestions and choose a returned property.') from None
