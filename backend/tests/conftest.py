@@ -10,6 +10,8 @@ os.environ['DATABASE_URL'] = 'sqlite:///' + str(Path(_directory.name) / 'tests.d
 os.environ['APP_MODE'] = 'demo'
 os.environ['GEOAPIFY_API_KEY'] = ''
 os.environ['GEMINI_FALLBACK_API_KEY'] = ''
+os.environ['RAILCORE_API_KEY'] = ''
+os.environ['TRAVELPAYOUTS_API_TOKEN'] = ''
 
 
 @pytest.fixture(scope='session', autouse=True)

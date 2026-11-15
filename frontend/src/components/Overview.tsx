@@ -5,6 +5,8 @@ import type { Plan, TransportMode } from '../types'
 import { RichText } from './RichText'
 import { modeIcon, modeLabel } from './RouteJourney'
 import { ease } from './ui'
+import { TransportSearch } from './TransportSearch'
+import { planDays, planDetails } from '../lib/trip'
 
 export function Overview({ plan, mode, suggested, onMode }: { plan: Plan; mode: TransportMode; suggested: TransportMode; onMode: (m: TransportMode) => void }) {
   const sp = plan.result?.structured_plan
@@ -32,6 +34,7 @@ export function Overview({ plan, mode, suggested, onMode }: { plan: Plan; mode: 
           </motion.button>
         })}</div>
         <p className="muted small">Durations and costs are unverified estimates. Check services before booking.</p>
+        <TransportSearch mode={mode} details={planDetails(plan, {})} days={planDays(plan)} />
       </Block>
 
       <Block icon={<Wallet size={16} />} title="Budget plan" tone="food" sub={`${currency} ${fmt(budgetTotal)}`}>
