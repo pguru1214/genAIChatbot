@@ -113,7 +113,7 @@ export function TripPanel({ plan, conv, actionBusy, onAction, onClose, onUpdate 
       </AnimatePresence>
     </div>
 
-    {(tab === 'journey' || tab === 'overview') && plan?.result && <footer className="panel-actions">
+    {(tab === 'journey' || tab === 'overview') && plan?.result?.trip_id && <footer className="panel-actions">
       {plan.result.action
         ? <Notice>Preview only. Google OAuth and execution are not connected. No email or calendar event was created.</Notice>
         : <>

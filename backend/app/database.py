@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, String, create_engine
+from sqlalchemy import JSON, DateTime, String, Integer, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.config import get_settings
@@ -41,6 +41,16 @@ class TourismPage(Base):
     id: Mapped[str] = mapped_column(String(120), primary_key=True)
     url: Mapped[str] = mapped_column(String(500))
     payload: Mapped[dict] = mapped_column(JSON)
+
+
+class ConversationLocalTurn(Base):
+    """Local replies are separate so pending graph interrupts stay resumable."""
+    __tablename__ = 'conversation_local_turns'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    conversation_id: Mapped[str] = mapped_column(String(36), index=True)
+    anchor: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 url = get_settings().database_url

@@ -19,6 +19,7 @@ from app.tools import DestinationNeedsClarification, resolve_destination
 from app.llm import invoke_structured
 from app.tourism import destination_route, INDIA_ONLY
 from app.planning import planning_defaults, clock_minutes
+from app.guardrails import evaluate, sanitize
 
 
 class TripDetails(BaseModel):
@@ -110,6 +111,7 @@ class ConversationState(TypedDict, total=False):
     resolved_location: dict
     resolved_input: str
     defaulted_fields: list[str]
+    guardrail: dict
 
 
 def demo_extract(message: str, current: dict, question: str) -> dict:
@@ -168,6 +170,11 @@ def direct_reply(message: str, question: str) -> dict | None:
 def collect(state: ConversationState):
     turn = state['turn']
     details = dict(state.get('details', {}))
+    decision = evaluate(turn['message'], question=state.get('question', ''), details=details, submitted=turn.get('details'))
+    if not decision.allow_llm:
+        return {'guardrail': decision.public(), 'messages': [*state.get('messages', []),
+            {'role': 'user', 'content': decision.message}, {'role': 'assistant', 'content': decision.reply}]}
+    turn = sanitize(turn)
     updates = direct_reply(turn['message'], state.get('question', ''))
     if updates is None and turn.get('details') and turn['message'] in {'Apply trip details', 'Retry saved turn'}:
         updates = {}
@@ -222,7 +229,7 @@ def collect(state: ConversationState):
             question, location_question = 'destination', str(error)
     if details.get('start_date') and date.fromisoformat(details['start_date']) < datetime.now(ZoneInfo(details['timezone'])).date():
         question = 'start_date'
-    return {'details': details, 'question': question, 'defaulted_fields': defaulted, 'result': None, 'location_question': location_question, 'location_choices': [],
+    return {'guardrail': decision.public(), 'turn': turn, 'details': details, 'question': question, 'defaulted_fields': defaulted, 'result': None, 'location_question': location_question, 'location_choices': [],
             'previous_plan': (state.get('result') or {}).get('answer', state.get('previous_plan', '')),
             'messages': [*state.get('messages', []), {'role': 'user', 'content': turn['message']}]}
 
@@ -242,6 +249,8 @@ def clarify(state: ConversationState):
 
 
 def next_step(state: ConversationState):
+    if state.get('guardrail') and not state['guardrail']['allow_llm']:
+        return END
     if state.get('location_question'):
         return 'clarify'
     if get_settings().app_mode == 'live' and state['details'].get('destination') and state.get('resolved_input') != state['details']['destination']:
@@ -265,6 +274,7 @@ def plan(state: ConversationState):
                'previous_plan': state.get('previous_plan', '')}
     request = ChatRequest(message=json.dumps(context)[:4000],
                           **details, defaulted_fields=state.get('defaulted_fields', []), intent='plan').model_dump(mode='json')
+    request['_guardrail_passed'] = True
     if state.get('resolved_input') == details['destination']:
         request['_resolved_location'] = state['resolved_location']
     # This node runs in the sync SSE worker thread, leaving FastAPI's event loop free.

@@ -7,7 +7,7 @@ type Block = { kind: 'day' | 'heading' | 'para'; text: string } | { kind: 'list'
  * and **bold**. Plain text without markers still renders as paragraphs.
  */
 export function RichText({ text, variant = 'chat' }: { text: string; variant?: 'chat' | 'plan' }) {
-  return <div className={'rich ' + variant}>{parse(text).map((block, i) => {
+  return <div className={'rich rich-' + variant}>{parse(text).map((block, i) => {
     if (block.kind === 'list') return <ul key={i}>{block.items.map((item, j) => <li key={j}>{inline(item)}</li>)}</ul>
     if (block.kind === 'day') return <h4 key={i} className="day"><span>{block.text.match(/\d+/)?.[0]}</span>{inline(block.text.replace(/:$/, ''))}</h4>
     if (block.kind === 'heading') return <h4 key={i}>{inline(block.text)}</h4>

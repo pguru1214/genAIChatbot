@@ -64,7 +64,7 @@ def test_full_plan_followup_and_no_duplicate_trip():
         assert result['pending'] is None
         assert result['result']['trip_id'] == conversation_id
         assert 'DEMO itinerary' in result['messages'][-1]['content']
-        assert result['result']['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Connectivity Planner', 'Itinerary Agent']
+        assert result['result']['agent_trace'] == ['Intent & Guardrail Agent', 'India Tourism Router', 'Travel Research Agent', 'Connectivity Planner', 'Itinerary Agent']
         changed = turn(client, conversation_id, 'Make it four days', {'days': 4})
         assert changed['details']['days'] == 4
         assert changed['details']['interests'] == 'history and local food'
@@ -77,7 +77,7 @@ def test_full_plan_followup_and_no_duplicate_trip():
 def test_each_detail_is_collected_and_threads_are_isolated():
     with TestClient(app) as client:
         one, two = create(client), create(client)
-        view = turn(client, one, 'Hello')
+        view = turn(client, one, 'Plan my trip')
         assert view['pending']['field'] == 'destination'
         for answer, expected in [('Jaipur', 'origin'), ('Delhi', 'days')]:
             view = turn(client, one, answer)
@@ -163,7 +163,9 @@ def test_busy_and_invalid_timezone():
             assert client.post(f'/api/conversations/{conversation_id}/messages', json={'message': 'Hi'}).status_code == 409
         finally:
             app.state.conversation_lock.release()
-        assert turn(client, conversation_id, 'Hi')['pending']['field'] == 'destination'
+        view = turn(client, conversation_id, 'Hi')
+        assert view['pending'] is None
+        assert view['messages'][-1]['content'].startswith('Hi!')
 
 
 def test_failed_plan_accepts_corrected_details(monkeypatch):

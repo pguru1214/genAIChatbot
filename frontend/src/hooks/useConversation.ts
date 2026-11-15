@@ -52,7 +52,7 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: (tri
     const lastUser = view?.messages.slice().reverse().find(m => m.role === 'user')?.content
     const repeatFailed = view?.recoverable && submitted === lastUser && !hasEdits &&
       Object.entries(chosenDetails).every(([key, value]) => value === view.details[key])
-    setBusy(true); setFailed(false); setStatus('Checking your trip details…'); setOutgoing(repeatFailed ? '' : submitted || (hasEdits ? 'Apply trip details' : 'Retry saved turn'))
+    setBusy(true); setFailed(false); setStatus('Checking your trip details…'); setOutgoing(repeatFailed ? '' : 'Checking your message…')
     let current = view
     try {
       if (!current) {
@@ -72,14 +72,16 @@ export function useConversation({ mode, onSaved }: { mode: string; onSaved: (tri
       if (!response.ok) throw new Error(response.status === 409 ? 'Conversation changed or is busy. Reopen it before sending again.' : response.status === 422 ? 'Check the details: valid dates, an IANA time zone, and 1–7 days are required.' : 'Could not accept this message.')
       setMessage('')
       let complete = false
+      let localResponse = false
       await readEvents(response, (event, data) => {
+        if (event === 'guardrail') setOutgoing(data.masked_message)
         if (event === 'progress') setStatus(data.message)
         if (event === 'conversation') { apply(data.conversation); if (data.conversation.result?.trip_id) onSaved(data.conversation.result.trip_id); setOutgoing('') }
-        if (event === 'completed') complete = true
+        if (event === 'completed') { complete = true; localResponse = !!data.local_response }
         if (event === 'error') throw new Error(data.message)
       })
       if (!complete) throw new Error('Connection interrupted. Reopen to check your saved progress.')
-      setMessage(''); setStatus('This chat clears when you refresh or close the page.')
+      setMessage(''); setStatus(localResponse ? 'Ready for your next travel question.' : 'This chat clears when you refresh or close the page.')
       await refreshList(); onSaved()
     } catch (error) {
       setFailed(true); setStatus(error instanceof TypeError && /fetch|network|load failed/i.test(error.message)

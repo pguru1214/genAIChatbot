@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.agents import graph
 from app.config import get_settings
-from app.database import Conversation, Proposal, SessionLocal, Trip, get_db, init_db
+from app.database import Conversation, ConversationLocalTurn, Proposal, SessionLocal, Trip, get_db, init_db
 from app.conversations import TurnRequest, build_conversation_graph, snapshot
 from app.schemas import ChatRequest
 from app.errors import public_error
@@ -24,6 +24,7 @@ from app.tourism import directory
 from app.food_stays import ServicePreferences, StopChoice, build_services, reserve_meals, append_service_text, stop_review
 from app.itinerary import DetailedItinerary, render_schedule
 from app.planning import planning_defaults
+from app.guardrails import evaluate, mask_text, sanitize
 from app.geocode import geocode_points
 from pydantic import BaseModel, Field
 
@@ -104,7 +105,27 @@ def list_conversations(db: Session = Depends(get_db)):
 def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
     if not db.get(Conversation, conversation_id):
         raise HTTPException(404, 'Conversation not found')
-    return snapshot(app.state.conversation_graph, conversation_id)
+    return conversation_view(app.state.conversation_graph, conversation_id)
+
+
+def conversation_view(workflow, conversation_id):
+    view = snapshot(workflow, conversation_id)
+    original = view['messages']
+    with SessionLocal() as session:
+        local = list(session.scalars(select(ConversationLocalTurn).where(
+            ConversationLocalTurn.conversation_id == conversation_id).order_by(
+                ConversationLocalTurn.created_at, ConversationLocalTurn.id)))
+        grouped = {}
+        for turn in local:
+            grouped.setdefault(min(turn.anchor, len(original)), []).append(turn.payload)
+        merged = []
+        for index in range(len(original) + 1):
+            for turn in grouped.get(index, []):
+                merged.extend([{'role': 'user', 'content': turn['masked_message']},
+                               {'role': 'assistant', 'content': turn['reply']}])
+            if index < len(original):
+                merged.append({**original[index], 'content': mask_text(original[index]['content'])})
+    return {**view, 'messages': merged}
 
 
 @app.post('/api/conversations/{conversation_id}/messages')
@@ -121,10 +142,13 @@ def conversation_message(conversation_id: str, request: TurnRequest, db: Session
         current = snapshot(workflow, conversation_id)
         if current['checkpoint_id'] != request.checkpoint_id:
             raise HTTPException(409, 'This conversation changed. Reopen it before sending again.')
-        if len(current['messages']) >= 100:
+        if len(conversation_view(workflow, conversation_id)['messages']) >= 100:
             raise HTTPException(422, 'This conversation reached its 100-message limit. Start a new journey.')
         turn = request.model_dump(mode='json', exclude={'checkpoint_id'})
         turn['details'] = request.details.model_dump(mode='json', exclude_none=True)
+        decision = evaluate(turn['message'], question=(current.get('pending') or {}).get('field', ''),
+                            details=current['details'], submitted=turn['details'])
+        turn = sanitize(turn)
         graph_input = Command(resume=turn) if current['pending'] else {'turn': turn}
         last_user = next((m['content'] for m in reversed(current['messages']) if m['role'] == 'user'), None)
         unchanged_details = all(current['details'].get(k) == v for k, v in turn['details'].items())
@@ -138,6 +162,18 @@ def conversation_message(conversation_id: str, request: TurnRequest, db: Session
     def events():
         try:
             run_id = str(uuid4())
+            if not decision.allow_llm:
+                with SessionLocal() as session:
+                    session.add(ConversationLocalTurn(conversation_id=conversation_id,
+                        anchor=len(current['messages']), payload=decision.public()))
+                    session.commit()
+                view = conversation_view(workflow, conversation_id)
+                view['guardrail'] = decision.public()
+                yield sse('guardrail', decision.public(), run_id)
+                yield sse('conversation', {'conversation': view}, run_id)
+                yield sse('completed', {'conversation_id': conversation_id, 'local_response': True}, run_id)
+                return
+            yield sse('guardrail', decision.public(), run_id)
             yield sse('progress', {'message': 'Checking your trip details'}, run_id)
             config = {'configurable': {'thread_id': conversation_id}, 'recursion_limit': 12}
             for update in workflow.stream(graph_input, config=config, stream_mode='updates', durability='sync'):
@@ -147,7 +183,7 @@ def conversation_message(conversation_id: str, request: TurnRequest, db: Session
                             'resolve': 'Destination checked', 'plan': 'Preparing your next step', 'save': 'Plan saved', 'clarify': 'Continuing your conversation'}.get(node, node)}, run_id)
                         if node == 'collect' and not update[node].get('question'):
                             yield sse('progress', {'message': 'Researching your destination and building your itinerary'}, run_id)
-            view = snapshot(workflow, conversation_id)
+            view = conversation_view(workflow, conversation_id)
             if view['details'].get('destination'):
                 with SessionLocal() as session:
                     row = session.get(Conversation, conversation_id)
@@ -222,7 +258,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                             state.update(value)
                         yield sse('progress', {'message': f'{node.capitalize()} completed'}, run_id)
             with SessionLocal() as session:
-                if state.get('action'):
+                if state.get('guardrail') and not state['guardrail']['allow_llm']:
+                    # A local response is not a saved itinerary or an action.
+                    state['trip_id'] = ''
+                elif state.get('action'):
                     proposal = Proposal(trip_id=request.trip_id, kind=request.intent,
                                         payload={'content': payload['saved_answer'], **state['action']})
                     session.add(proposal)

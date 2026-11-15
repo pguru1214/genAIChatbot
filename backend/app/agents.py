@@ -16,6 +16,7 @@ from app.itinerary import connectivity_context, schedule_schema, render_schedule
 from app.errors import ModelResponseError
 from app.weather import itinerary_weather
 from app.food_stays import reserve_meals, build_services, append_service_text
+from app.guardrails import AGENT, evaluate, sanitize
 
 
 class AgentOutput(BaseModel):
@@ -36,6 +37,7 @@ class State(TypedDict, total=False):
     structured_plan: dict
     planning_status: str
     food_stays: dict
+    guardrail: dict
 
 
 class TourismSelection(BaseModel):
@@ -64,7 +66,22 @@ async def tourism_router(state: State) -> dict:
     districts = select_districts(route, request, proposed)
     route['source_ids'] = [d['id'] for d in districts] or ([route['region_id']] if route.get('region_id') else [])
     return {'request': {**request, '_tourism_route': route, '_district_ids': [d['id'] for d in districts]},
-            'agent_trace': ['India Tourism Router']}
+            'agent_trace': [*state.get('agent_trace', []), 'India Tourism Router']}
+
+
+def guardrail_agent(state: State) -> dict:
+    request = state['request']
+    # Only the server-side conversation planner can set this flag. API request
+    # schemas ignore unknown fields; it avoids classifying serialized context.
+    if request.get('_guardrail_passed'):
+        return {'request': sanitize(request), 'guardrail': {'intent': 'travel', 'allow_llm': True, 'agent': AGENT},
+                'agent_trace': [AGENT]}
+    user_fields = {k: request.get(k) for k in ('destination', 'origin', 'interests', 'companions', 'cuisine')}
+    decision = evaluate(request['message'], submitted=user_fields)
+    result = {'request': sanitize(request), 'guardrail': decision.public(), 'agent_trace': [AGENT]}
+    if not decision.allow_llm:
+        result.update(answer=decision.reply, source_ids=[], route='local')
+    return result
 
 
 async def generate(role: str, context: dict) -> dict:
@@ -93,7 +110,7 @@ def route(state: State) -> dict:
         request['defaulted_fields'] = list(dict.fromkeys([*request.get('defaulted_fields', []), *added]))
         if not (request.get('origin') or '').strip():
             raise DestinationNeedsClarification('Where will you start your journey? Please provide your starting city.', field='origin')
-    return {'request': request, 'route': intent, 'agent_trace': []}
+    return {'request': request, 'route': intent, 'agent_trace': state.get('agent_trace', [])}
 
 
 async def research(state: State) -> dict:
@@ -188,7 +205,7 @@ async def action(state: State) -> dict:
     # Exact proposal contents are assembled from a saved plan, not invented by a model.
     kind = 'Email' if request['intent'] == 'email' else 'Calendar export'
     return {'answer': f"{kind} content preview\n\n{request.get('saved_answer', '')}\n\nLive Google execution is not implemented in this starter. No action has been executed.",
-            'source_ids': [], 'agent_trace': ['Action Agent'],
+            'source_ids': [], 'agent_trace': [*state.get('agent_trace', []), 'Action Agent'],
             'action': {'kind': request['intent'], 'trip_id': request['trip_id'], 'execution_enabled': False}}
 
 
@@ -200,6 +217,7 @@ def validate(state: State) -> dict:
 
 
 builder = StateGraph(State)
+builder.add_node('guardrail_agent', guardrail_agent)
 builder.add_node('router', route)
 builder.add_node('tourism_router', tourism_router)
 builder.add_node('research', research)
@@ -207,7 +225,8 @@ builder.add_node('itinerary', itinerary)
 builder.add_node('connectivity', connectivity)
 builder.add_node('action', action)
 builder.add_node('validate', validate)
-builder.add_edge(START, 'router')
+builder.add_edge(START, 'guardrail_agent')
+builder.add_conditional_edges('guardrail_agent', lambda s: 'router' if s['guardrail']['allow_llm'] else END)
 builder.add_conditional_edges('router', lambda s: 'action' if s['route'] in {'email', 'calendar'} else 'tourism_router')
 builder.add_edge('tourism_router', 'research')
 builder.add_conditional_edges('research', lambda s: 'connectivity' if s['route'] == 'plan' else 'validate')

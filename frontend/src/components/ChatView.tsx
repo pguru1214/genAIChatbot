@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'motion/react'
 import { ArrowUp, ChevronDown, Compass, Landmark, Map as MapIcon, Menu, Mountain, PanelRightClose, PanelRightOpen, RotateCcw, Sparkles, UserRound, UtensilsCrossed } from 'lucide-react'
 import type { ConversationState } from '../hooks/useConversation'
 import { RichText } from './RichText'
-import { RouteArt } from './RouteArt'
 import { Notice, ease } from './ui'
 
 const suggestions = [
@@ -60,7 +59,6 @@ export function ChatView({ conv, mode, sidebarOpen, panelOpen, onMenu, onToggleP
             {busy && <motion.div key="typing" className="msg assistant" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }}>
               <span className="avatar guide"><Compass size={15} /></span>
               <div className="thinking">
-                <RouteArt status={status} />
                 <div className="typing"><span className="dots"><span /><span /><span /></span>
                   <AnimatePresence mode="wait"><motion.em key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>{status}</motion.em></AnimatePresence></div>
               </div>

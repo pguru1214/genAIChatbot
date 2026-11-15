@@ -233,6 +233,21 @@ also consume the provider's allowance. Runtime quota records live in the ignored
 `backend/.cache/` directory. Sources: [Geoapify free plan](https://www.geoapify.com/pricing/)
 and [Places API](https://apidocs.geoapify.com/docs/places).
 
+### Local intent and conversation guardrails
+
+Before any user-turn model call, the local **Intent & Guardrail Agent** checks
+the question and submitted trip fields. Greetings and basic help get a local
+response; non-travel questions get a travel-only fallback. Recognized abusive
+words are replaced with `[masked]`, followed by a request to keep the conversation
+professional and rephrase. These turns do not call Gemini or travel providers.
+Pending trip questions, checkpoints and existing itineraries stay intact.
+
+This gate uses conservative local rules in `backend/app/guardrails.py`, including
+trip-answer formats and common obfuscated profanity. It does not spend an LLM
+call to classify intent and does not claim exhaustive language coverage. Restart
+the backend after updating the code; the local development bootstrap creates the
+new local-turn table automatically.
+
 ## Agent architecture
 
 ### Guided trip conversations

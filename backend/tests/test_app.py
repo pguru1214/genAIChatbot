@@ -30,7 +30,7 @@ def test_plan_stream_persist_delete():
     with TestClient(app) as client:
         response = client.post('/api/chat', json=request())
         result = stream_result(response)
-        assert result['agent_trace'] == ['India Tourism Router', 'Travel Research Agent', 'Connectivity Planner', 'Itinerary Agent']
+        assert result['agent_trace'] == ['Intent & Guardrail Agent', 'India Tourism Router', 'Travel Research Agent', 'Connectivity Planner', 'Itinerary Agent']
         assert 'DEMO' in result['answer']
         assert response.text.index('event: progress') < response.text.index('event: completed')
         assert any(t['id'] == result['trip_id'] for t in client.get('/api/trips').json())
@@ -41,7 +41,7 @@ def test_plan_stream_persist_delete():
 def test_research_bypasses_planner():
     with TestClient(app) as client:
         result = stream_result(client.post('/api/chat', json=request(message='What is the weather?')))
-        assert result['agent_trace'] == ['India Tourism Router', 'Travel Research Agent']
+        assert result['agent_trace'] == ['Intent & Guardrail Agent', 'India Tourism Router', 'Travel Research Agent']
         assert 'No live weather' in result['answer']
 
 
@@ -49,7 +49,7 @@ def test_action_preview_cannot_send():
     with TestClient(app) as client:
         saved = stream_result(client.post('/api/chat', json=request()))
         result = stream_result(client.post('/api/chat', json=request(intent='email', trip_id=saved['trip_id'])))
-        assert result['agent_trace'] == ['Action Agent']
+        assert result['agent_trace'] == ['Intent & Guardrail Agent', 'Action Agent']
         assert result['action']['execution_enabled'] is False
         assert saved['answer'] in result['answer']
         assert client.post('/api/proposals/' + result['proposal_id'] + '/approve').status_code == 501

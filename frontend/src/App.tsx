@@ -85,7 +85,7 @@ export function App() {
       await readEvents(response, (event, data) => {
         if (event === 'progress') setPinned(p => p && { ...p, status: data.message })
         if (event === 'answer_delta') setPinned(p => p && { ...p, answer: p.answer + data.text })
-        if (event === 'completed') { completed = true; sessionTripIds.current.add(data.result.trip_id); if (!data.result.action) celebrate(data.result.trip_id); setPinned(p => p && { ...p, result: data.result, details: data.result.request, streaming: false }) }
+        if (event === 'completed') { completed = true; if (data.result.trip_id) { sessionTripIds.current.add(data.result.trip_id); if (!data.result.action) celebrate(data.result.trip_id) } setPinned(p => p && { ...p, result: data.result, details: data.result.request, streaming: false }) }
         if (event === 'error') throw new Error(data.message)
       })
       if (!completed) throw new Error('Connection ended before completion. Check saved trips before retrying.')

@@ -601,6 +601,24 @@ content, never internal reasoning or unrestricted tool output.
 
 ### 7.7 Guardrails and evidence grounding
 
+- Run a local **Intent & Guardrail Agent** before user-turn detail extraction,
+  geocoding/research and any specialist LLM invocation. It is a deterministic
+  routing gate, additional to the three specialist AI roles, and makes no model
+  call to classify intent.
+- Answer greetings and basic help locally in the same conversational style.
+  Return a travel-only fallback for unrelated questions, even when a destination
+  or planning intent is supplied. Ask for clarification locally for unknown intent.
+- Mask recognized abusive language as `[masked]` and request a professional,
+  respectful rephrasing. Stop that turn before model/provider calls; check both
+  message text and submitted detail fields. Do not persist the original abuse.
+- Preserve the existing trip, pending question, checkpoint and retry state on
+  local responses. Accept valid context-specific trip replies and ordinary edits.
+  The client displays only server-sanitized submitted text in chat bubbles.
+- Test both guided and quick-plan paths with model/provider calls forbidden for
+  rejected turns. The initial policy uses conservative local vocabulary and
+  answer formats, including selected obfuscations and Hindi/transliterated abuse;
+  do not claim universal semantic or multilingual detection.
+
 | Boundary | Required controls |
 | --- | --- |
 | Input | Authentication, ownership, size limits, date/location clarification |

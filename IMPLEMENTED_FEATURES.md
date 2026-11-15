@@ -4,6 +4,27 @@ Updated: 15 November 2026. This document describes working code; [PRD.md](PRD.md
 defines the wider target product. This remains a local, single-user development
 application, without production authentication.
 
+## Pre-LLM intent and conversation guardrails
+
+- A deterministic **Intent & Guardrail Agent** runs before trip-detail extraction,
+  destination research and the planning graph. It does not call a model itself.
+- Greetings, courtesy and basic help requests receive local replies. Unrelated
+  questions receive a travel-only fallback even if a destination or explicit
+  planning intent was supplied. Unknown intent receives a local clarification.
+- Recognized abusive words, common obfuscations, and selected Hindi/transliterated
+  insults are masked as `[masked]`. The turn receives a professional-tone reminder
+  and stops before provider/model calls. Submitted detail fields are also checked.
+- Local replies preserve pending questions, checkpoints, failed-work recovery,
+  existing trip details and completed itineraries. Masked local turns are stored
+  separately from workflow checkpoints so they do not consume a pending answer.
+- The UI waits for the server's sanitized message before displaying submitted
+  text. Local quick-plan replies do not create saved trips, action buttons or
+  completion celebrations. Standard travel/detail edits continue normally.
+- This is a conservative vocabulary/format policy with context-aware trip answers,
+  not a universal semantic or multilingual profanity classifier. Extend
+  `backend/app/guardrails.py` for additional language and intent coverage.
+  The three existing specialist LLM roles remain unchanged.
+
 ## Daily meals and accommodation
 
 - Every generated day has breakfast 08:00–09:00, lunch 13:00–14:00 and dinner

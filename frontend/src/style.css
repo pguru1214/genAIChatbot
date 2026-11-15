@@ -139,14 +139,16 @@ input:disabled, textarea:disabled { opacity: .6 }
 /* ── Chat ─────────────────────────────────────────── */
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 20px 10px; scroll-behavior: smooth }
 .chat-column { width: 100%; max-width: 760px; margin: 0 auto }
-.msg { display: flex; gap: 12px; margin-bottom: 22px }
+.msg { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 24px }
 .msg.user { flex-direction: row-reverse }
 .avatar { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; color: #fff }
 .avatar.guide { background: linear-gradient(135deg, var(--teal), var(--ocean-800)); box-shadow: 0 6px 14px -6px #0f2b30aa }
 .avatar.me { background: linear-gradient(135deg, var(--sun), var(--terra)) }
 .msg-body { min-width: 0; overflow-wrap: anywhere }
-.msg.assistant .msg-body { flex: 1; padding-top: 4px }
-.msg.user .msg-body { max-width: min(80%, 560px); padding: 11px 16px; border-radius: 18px 18px 6px 18px; color: #f4ede2; background: linear-gradient(135deg, var(--ocean-800), var(--ocean-600)); box-shadow: var(--shadow-sm) }
+.msg.assistant .msg-body { flex: 0 1 auto; max-width: min(88%, 640px); padding: 14px 20px; border-radius: 6px 18px 18px 18px; background: #fffdf9; border: 1px solid var(--line); box-shadow: var(--shadow-sm) }
+.msg.assistant .msg-body .rich > :last-child { margin-bottom: 0 }
+.msg.assistant .msg-body .text-btn { margin-top: 8px }
+.msg.user .msg-body { max-width: min(80%, 560px); padding: 12px 18px; border-radius: 18px 18px 6px 18px; color: #f4ede2; background: linear-gradient(135deg, var(--ocean-800), var(--ocean-600)); box-shadow: var(--shadow-sm) }
 .msg.user p { margin: 0; white-space: pre-wrap; font-size: 15px; line-height: 1.6 }
 .clamped { max-height: 300px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 65%, transparent); mask-image: linear-gradient(#000 65%, transparent) }
 .typing { display: inline-flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 14px; background: var(--sand-100); border: 1px solid var(--line) }
@@ -173,9 +175,9 @@ input:disabled, textarea:disabled { opacity: .6 }
 .rich .lead { color: var(--terra-deep) }
 .rich h4.day { display: flex; align-items: center; gap: 10px }
 .rich h4.day span { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; font: 700 13px/1 'Plus Jakarta Sans', sans-serif; color: #fff; background: linear-gradient(135deg, var(--teal), var(--ocean-800)) }
-.rich.plan h4.day { margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--sand-300) }
-.rich.plan > h4.day:first-child { border-top: 0; padding-top: 0 }
-.rich.plan h4.day ~ p, .rich.plan h4.day ~ ul { margin-left: 38px }
+.rich.rich-plan h4.day { margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--sand-300) }
+.rich.rich-plan > h4.day:first-child { border-top: 0; padding-top: 0 }
+.rich.rich-plan h4.day ~ p, .rich.rich-plan h4.day ~ ul { margin-left: 38px }
 
 /* Welcome */
 .welcome { text-align: center; padding: clamp(16px, 6vh, 64px) 0 20px }
@@ -230,7 +232,7 @@ input:disabled, textarea:disabled { opacity: .6 }
 .empty-itinerary { text-align: center }
 .empty-itinerary h3 { font: 500 21px/1.3 var(--display); margin: 20px 0 14px; color: var(--ocean-900) }
 .steps { list-style: none; margin: 0 auto; padding: 0; max-width: 360px; text-align: left }
-.steps li { display: flex; align-items: center; gap: 12px; padding: 9px 0; font-size: 13.5px; color: var(--ink-soft) }
+.steps li { display: flex; align-items: center; gap: 14px; padding: 10px 14px; margin-bottom: 8px; border-radius: 12px; background: #fffdf9; border: 1px solid var(--line); font-size: 13.5px; color: var(--ink-soft) }
 .steps li span { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; font-size: 12px; font-weight: 700; color: var(--terra); background: #fff1e6; border: 1px solid #f4c9ad }
 
 .route-art { position: relative; height: 210px; border-radius: 20px; overflow: hidden; background: linear-gradient(180deg, #fde3c3 0%, #f9d2b0 45%, #f6e6d2 100%); border: 1px solid #f1d6b6 }
@@ -241,12 +243,12 @@ input:disabled, textarea:disabled { opacity: .6 }
 .cloud { position: absolute; height: 24px; border-radius: 30px; background: #fffaf2 }
 .cloud::before, .cloud::after { content: ''; position: absolute; background: inherit; border-radius: 50% }
 .cloud::before { width: 46%; height: 160%; left: 16%; top: -70% } .cloud::after { width: 34%; height: 120%; right: 16%; top: -45% }
-.c1 { width: 84px; left: 10%; top: 18% } .c2 { width: 110px; right: 4%; top: 52% }
+.c1 { width: 84px; left: 36%; top: 12% } .c2 { width: 110px; right: 4%; top: 52% }
 .route-map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1 }
 .pin-ring { fill: none; stroke: var(--terra); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: ring 2.4s ease-out infinite }
 @keyframes ring { from { transform: scale(1); opacity: .8 } to { transform: scale(3.6); opacity: 0 } }
 .plane { filter: drop-shadow(0 3px 2px #0003) }
-.float-chip { position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 99px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+.float-chip { position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 99px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
   background: #fffdf9e6; backdrop-filter: blur(8px); color: var(--ocean-800); box-shadow: 0 10px 24px -10px #6b3f1d55; border: 1px solid #fff }
 .float-chip svg { color: var(--terra) }
 .f1 { left: 5%; top: 9%; animation: bob 5s ease-in-out infinite }
@@ -313,8 +315,9 @@ input:disabled, textarea:disabled { opacity: .6 }
   .composer-hint { display: none }
   .starters { grid-template-columns: 1fr }
   .msg.user .msg-body { max-width: 88% }
+  .msg.assistant .msg-body { max-width: 100%; padding: 12px 16px }
   .panel-body { padding: 16px }
-  .rich.plan h4.day ~ p, .rich.plan h4.day ~ ul { margin-left: 0 }
+  .rich.rich-plan h4.day ~ p, .rich.rich-plan h4.day ~ ul { margin-left: 0 }
 }
 @media (max-width: 480px) {
   .details-grid, .modal-row { grid-template-columns: 1fr }
