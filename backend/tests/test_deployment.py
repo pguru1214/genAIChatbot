@@ -46,6 +46,14 @@ def test_access_login_cookie_and_greeting(public_settings):
         assert 'Hello!' in response.text
 
 
+def test_eight_character_password_is_supported(public_settings, monkeypatch):
+    monkeypatch.setattr(public_settings, 'deployment_access_password', 'test123!')
+    with TestClient(app, base_url='https://testserver') as client:
+        response = client.post('/access', data={'password': 'test123!'}, follow_redirects=False)
+        assert response.status_code == 303
+        assert client.get('/api/trips').status_code == 200
+
+
 def test_invalid_and_tampered_access_are_rejected(public_settings):
     with TestClient(app, base_url='https://testserver') as client:
         assert client.post('/access', data={'password': 'wrong'}).status_code == 401

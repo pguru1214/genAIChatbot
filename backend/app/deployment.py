@@ -71,7 +71,7 @@ def configure_deployment(app):
         settings = get_settings()
         if settings.public_deployment:
             # Fail closed even during startup/configuration mistakes.
-            if len(settings.deployment_access_password) < 20 or len(settings.session_signing_key) < 32:
+            if len(settings.deployment_access_password) < 8 or len(settings.session_signing_key) < 32:
                 return JSONResponse({'detail': 'Demo access is not configured.'}, status_code=503)
             path = request.url.path
             origin = request.headers.get('origin')

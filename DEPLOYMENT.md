@@ -1,5 +1,25 @@
 # Free personal-demo deployment
 
+## Live deployment — verified 15 November 2026
+
+- URL: https://tripweave-guru-demo.onrender.com
+- Dashboard: https://dashboard.render.com/web/srv-dbsqm1bl550s7397cmgg
+- Workspace: guru's workspace; Singapore region; **Free** compute plan.
+- Source: https://github.com/pguru1214/genAIChatbot/tree/deploy/free-render
+- Deployed commit: `82f657b4e54de4df425f95c34601fcc2bcb26e0f`.
+- Automatic deploys: **off**, to avoid unintended rebuilds. Update the deployment
+  branch and manually deploy when changes are ready.
+- Access password: stored in the ignored local `backend/.env` under
+  `DEPLOYMENT_ACCESS_PASSWORD`, and in Render's environment-variable settings.
+  Do not commit or paste it into public repository files.
+- Verified: live health endpoint, unauthorized API rejection, browser-Origin
+  access login, compiled frontend assets without embedded credentials, local
+  greeting/non-travel guardrails, and a real Gemini itinerary with three meal
+  windows, nine restaurant references and three destination stay references.
+  The disposable verification itinerary was deleted after the test.
+- Validation before release: 167 backend tests and the frontend production build
+  passed. Docker build/startup were verified by the successful Render deployment.
+
 The root Dockerfile builds React with Node 22 and serves the compiled frontend
 and FastAPI API together with Python 3.13. It uses a single worker and binds to
 `0.0.0.0:$PORT`. No separate frontend hosting, paid database, disk, cron or worker
@@ -10,7 +30,7 @@ Set these runtime variables in the hosting provider's secret settings:
 
 - `APP_MODE=live`
 - `PUBLIC_DEPLOYMENT=true`
-- `DEPLOYMENT_ACCESS_PASSWORD`: a unique random password, at least 20 characters.
+- `DEPLOYMENT_ACCESS_PASSWORD`: access password, at least 8 characters.
 - `SESSION_SIGNING_KEY`: a separate random secret, at least 32 characters.
 - `GEMINI_API_KEY`, `GEMINI_MODEL`, optional `GEMINI_FALLBACK_API_KEY` and
   `GEMINI_FALLBACK_MODEL`: existing free-tier account credentials/model.
