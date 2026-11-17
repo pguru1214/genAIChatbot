@@ -1,5 +1,8 @@
 # TripWeave — travel assistant starter
 
+Three standalone MCP servers expose travel research, accommodation/dining, and
+attractions tools. See [MCP server setup and tool reference](docs/MCP_SERVERS.md).
+
 React + TypeScript + Vite frontend, FastAPI backend, and three LangGraph roles
 using LangChain's Gemini integration. PostgreSQL is supported; SQLite is the
 default zero-configuration development fallback. **Docker is optional.**
@@ -87,7 +90,7 @@ Then install the locked dependencies and run the service:
 
 ```sh
 python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+python main.py --reload
 ```
 
 If your Windows policy prevents activation, invoke `.venv\Scripts\python.exe`
@@ -95,6 +98,15 @@ directly instead of changing system execution policy. Run commands from `backend
 so the application finds its `.env` and development database.
 
 API documentation is served at `/docs` on port 8000. Health is `GET /api/health`.
+
+With the backend virtual environment activated, `python main.py` from `backend`
+starts the API without automatic reload. From the repository root in PowerShell,
+use `./backend/.venv/Scripts/python.exe ./backend/main.py --reload`.
+If the current Python has no Uvicorn, the launcher automatically switches to
+`backend/.venv` when it exists. Install dependencies first if that environment
+is missing: `uv sync --project backend --frozen` from the repository root.
+The filename is `main.py` (including the dot). This starts the API only; the
+frontend and standalone [MCP servers](docs/MCP_SERVERS.md) have separate commands.
 
 On Windows, VS Code **Terminal > Run Task > Backend: run** starts the service
 with `backend/.venv/Scripts/python.exe` explicitly, even if an old terminal is
